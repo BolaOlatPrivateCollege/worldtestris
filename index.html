@@ -234,7 +234,7 @@ document.addEventListener("keydown",e=>{
   if(e.key==="ArrowUp") rotate();
 });
 
-const socket = new WebSocket("ws://localhost:3000");
+const socket = new WebSocket("wss://tetris-server-fowt.onrender.com");
 
 function sendState(){
   socket.send(JSON.stringify({board}));
