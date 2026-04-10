@@ -13,20 +13,41 @@
       color: white;
       font-family: Arial;
     }
+
     canvas {
       background: black;
       box-shadow: 0 0 20px cyan;
     }
+
     #panel {
       margin-left: 20px;
     }
+
     button {
       margin: 5px;
       padding: 8px;
       cursor: pointer;
     }
+
+    #controls {
+      position: fixed;
+      bottom: 20px;
+      display: flex;
+      gap: 10px;
+    }
+
+    #controls button {
+      padding: 15px;
+      font-size: 20px;
+      border: none;
+      border-radius: 8px;
+      background: #0ff;
+      color: black;
+      box-shadow: 0 0 10px #0ff;
+    }
   </style>
 </head>
+
 <body>
 
 <canvas id="game" width="240" height="400"></canvas>
@@ -43,8 +64,12 @@
   <button onclick="setTheme('dark')">Dark</button>
 </div>
 
-<audio id="bgm" loop src="bg.mp3"></audio>
-<audio id="clear" src="clear.mp3"></audio>
+<div id="controls">
+  <button onclick="move(-1)">⬅️</button>
+  <button onclick="rotate()">🔄</button>
+  <button onclick="move(1)">➡️</button>
+  <button onclick="moveDown()">⬇️</button>
+</div>
 
 <script>
 const canvas = document.getElementById("game");
@@ -175,7 +200,6 @@ function clearLines(){
   }
 
   if(lines>0){
-    document.getElementById("clear").play();
     updateScore(lines*10);
   }
 }
@@ -225,7 +249,13 @@ function rotate(){
   if(collision()) piece.shape=old;
 }
 
-document.addEventListener("keydown",e=>{
+// ✅ FIXED KEY CONTROLS
+window.addEventListener("keydown", function(e){
+
+  if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].includes(e.key)){
+    e.preventDefault();
+  }
+
   if(gameOver) return;
 
   if(e.key==="ArrowLeft") move(-1);
@@ -234,16 +264,22 @@ document.addEventListener("keydown",e=>{
   if(e.key==="ArrowUp") rotate();
 });
 
-const socket = new WebSocket("wss://tetris-server-fowt.onrender.com");
+// Multiplayer (safe if offline)
+let socket;
+try {
+  socket = new WebSocket("wss://your-app-name.onrender.com");
+
+  socket.onmessage = (e)=>{
+    let data = JSON.parse(e.data);
+    drawOpponent(data);
+  };
+} catch {}
 
 function sendState(){
-  socket.send(JSON.stringify({board}));
+  if(socket && socket.readyState===1){
+    socket.send(JSON.stringify({board}));
+  }
 }
-
-socket.onmessage = (e)=>{
-  let data = JSON.parse(e.data);
-  drawOpponent(data);
-};
 
 function gameLoop(){
   moveDown();
@@ -252,7 +288,7 @@ function gameLoop(){
   if(!gameOver) setTimeout(gameLoop,speed);
 }
 
-document.getElementById("bgm").play();
+window.focus();
 gameLoop();
 </script>
 
