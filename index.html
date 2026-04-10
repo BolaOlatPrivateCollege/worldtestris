@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Tetris Pro Ultimate (Clean Multiplayer)</title>
+  <title>Tetris Ultimate Final</title>
   <style>
     body {
       margin:0;
@@ -53,20 +53,39 @@
   <button onclick="location.reload()">Restart</button>
 </div>
 
+<!-- SOUND -->
+<audio id="bgm" src="bg.mp3" loop></audio>
+<audio id="move" src="move.wav"></audio>
+<audio id="rotate" src="rotate.wav"></audio>
+<audio id="clear" src="clear.wav"></audio>
+<audio id="drop" src="drop.wav"></audio>
+<audio id="gameover" src="gameover.wav"></audio>
+
 <script>
-// ================= GAME ENGINE =================
+// 🔊 SOUND SYSTEM
+function playSound(id){
+ let s=document.getElementById(id);
+ s.currentTime=0;
+ s.play().catch(()=>{});
+}
+
+// unlock audio
+document.body.addEventListener("click",()=>{
+ document.getElementById("bgm").play().catch(()=>{});
+},{once:true});
+
+// ================= GAME =================
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
+const oppCtx = document.getElementById("opponent").getContext("2d");
 const nextCtx = document.getElementById("next").getContext("2d");
 const holdCtx = document.getElementById("hold").getContext("2d");
-const oppCtx = document.getElementById("opponent").getContext("2d");
 
 const ROWS=20, COLS=10, SIZE=20;
 
-let board, piece, nextPiece, holdPiece=null;
-let canHold=true, gameOver=false;
+let board,piece,nextPiece,holdPiece=null;
+let canHold=true,gameOver=false;
 
-// SHAPES
 const pieces=[
  {shape:[[1,1,1,1]],color:"cyan"},
  {shape:[[1,1],[1,1]],color:"yellow"},
@@ -91,15 +110,18 @@ function init(){
  nextPiece=randomPiece();
 }
 
+// 🎨 DRAW CELL (RESTORED DESIGN)
 function drawCell(ctx,x,y,color,size){
  ctx.fillStyle=color;
  ctx.fillRect(x*size,y*size,size,size);
+ ctx.strokeStyle="#111";
+ ctx.strokeRect(x*size,y*size,size,size);
 }
 
-// GHOST
+// 👁️ GHOST
 function drawGhost(){
  let y=piece.y;
- while(!checkCollision(piece.x,y,piece.shape)) y++;
+ while(!collision(piece.x,y,piece.shape)) y++;
  y--;
 
  piece.shape.forEach((r,dy)=>r.forEach((v,dx)=>{
@@ -124,6 +146,16 @@ function draw(){
  drawMini(holdCtx,holdPiece);
 }
 
+// opponent
+function drawOpponent(b){
+ oppCtx.clearRect(0,0,120,200);
+ b.forEach((r,y)=>r.forEach((v,x)=>{
+  if(v){
+    drawCell(oppCtx,x,y,"red",10);
+  }
+ }));
+}
+
 function drawMini(ctx,p){
  ctx.clearRect(0,0,100,100);
  if(!p) return;
@@ -131,7 +163,7 @@ function drawMini(ctx,p){
 }
 
 // COLLISION
-function checkCollision(px,py,shape){
+function collision(px,py,shape){
  for(let y=0;y<shape.length;y++){
   for(let x=0;x<shape[y].length;x++){
    if(!shape[y][x]) continue;
@@ -145,12 +177,10 @@ function checkCollision(px,py,shape){
  return false;
 }
 
-function collision(){ return checkCollision(piece.x,piece.y,piece.shape); }
-
-// GAME ACTIONS
+// GAME LOGIC
 function moveDown(){
  piece.y++;
- if(collision()){
+ if(collision(piece.x,piece.y,piece.shape)){
   piece.y--;
   merge();
   clearLines();
@@ -160,14 +190,16 @@ function moveDown(){
 
 function move(d){
  piece.x+=d;
- if(collision()) piece.x-=d;
+ if(collision(piece.x,piece.y,piece.shape)) piece.x-=d;
+ else playSound("move");
 }
 
 function rotate(){
  let r=piece.shape[0].map((_,i)=>piece.shape.map(row=>row[i]).reverse());
  let old=piece.shape;
  piece.shape=r;
- if(collision()) piece.shape=old;
+ if(collision(piece.x,piece.y,piece.shape)) piece.shape=old;
+ else playSound("rotate");
 }
 
 function merge(){
@@ -185,7 +217,7 @@ function spawnNext(){
  nextPiece=randomPiece();
  canHold=true;
 
- if(collision()) endGame();
+ if(collision(piece.x,piece.y,piece.shape)) endGame();
 }
 
 function clearLines(){
@@ -198,10 +230,12 @@ function clearLines(){
 
  while(board.length<ROWS) board.unshift(Array(COLS).fill(0));
 
- if(lines>0) sendAttack(lines);
+ if(lines>0){
+  playSound("clear");
+  sendAttack(lines);
+ }
 }
 
-// HOLD
 function hold(){
  if(!canHold) return;
 
@@ -217,10 +251,10 @@ function hold(){
  canHold=false;
 }
 
-// HARD DROP
 function hardDrop(){
- while(!collision()) piece.y++;
+ while(!collision(piece.x,piece.y,piece.shape)) piece.y++;
  piece.y--;
+ playSound("drop");
  merge();
  clearLines();
  spawnNext();
@@ -228,14 +262,15 @@ function hardDrop(){
 
 function endGame(){
  gameOver=true;
+ playSound("gameover");
  document.getElementById("overlay").style.display="flex";
 }
 
 // ================= MULTIPLAYER =================
 let socket = new WebSocket("wss://tetris-server-fowt.onrender.com");
 
-socket.onmessage = (e)=>{
- let data = JSON.parse(e.data);
+socket.onmessage=(e)=>{
+ let data=JSON.parse(e.data);
 
  if(data.type==="state") drawOpponent(data.board);
  if(data.type==="attack") addGarbage(data.lines);
@@ -253,16 +288,6 @@ function sendAttack(lines){
  }
 }
 
-function drawOpponent(b){
- oppCtx.clearRect(0,0,120,200);
- b.forEach((r,y)=>r.forEach((v,x)=>{
-  if(v){
-    oppCtx.fillStyle="red";
-    oppCtx.fillRect(x*10,y*10,10,10);
-  }
- }));
-}
-
 function addGarbage(lines){
  for(let i=0;i<lines;i++){
   board.shift();
@@ -272,7 +297,7 @@ function addGarbage(lines){
  }
 }
 
-// ================= LOOP =================
+// LOOP
 function gameLoop(){
  if(gameOver) return;
 
