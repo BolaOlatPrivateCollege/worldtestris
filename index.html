@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Tetris Pro (Hold + Next)</title>
+  <title>Tetris Pro (Ghost + Hold + Next)</title>
   <style>
     body {
       margin:0;
@@ -19,24 +19,7 @@
       box-shadow:0 0 20px cyan;
     }
 
-    #panel {
-      margin-left:20px;
-    }
-
-    #controls {
-      position:fixed;
-      bottom:20px;
-      display:flex;
-      gap:10px;
-    }
-
-    #controls button {
-      padding:15px;
-      font-size:20px;
-      background:#0ff;
-      border:none;
-      border-radius:8px;
-    }
+    #panel { margin-left:20px; }
 
     #overlay {
       position:fixed;
@@ -65,13 +48,6 @@
 
   <h3>Hold</h3>
   <canvas id="hold" width="100" height="100"></canvas>
-</div>
-
-<div id="controls">
-  <button onclick="move(-1)">⬅️</button>
-  <button onclick="rotate()">🔄</button>
-  <button onclick="move(1)">➡️</button>
-  <button onclick="moveDown()">⬇️</button>
 </div>
 
 <div id="overlay">
@@ -110,7 +86,7 @@ const pieces = [
 
 function createPiece(p){
  return {
-   shape: p.shape.map(row => [...row]),
+   shape: p.shape.map(r => [...r]),
    color: p.color,
    x: Math.floor(COLS/2)-1,
    y: 0
@@ -143,8 +119,34 @@ function drawCell(ctx,x,y,color,size){
  ctx.strokeRect(x*size,y*size,size,size);
 }
 
+// 👁️ GHOST PIECE
+function drawGhost(){
+ let ghostY = piece.y;
+
+ while(true){
+   ghostY++;
+   if(checkCollision(piece.x, ghostY, piece.shape)){
+     ghostY--;
+     break;
+   }
+ }
+
+ piece.shape.forEach((row,y)=>{
+   row.forEach((val,x)=>{
+     if(val){
+       ctx.globalAlpha = 0.3;
+       drawCell(ctx, piece.x+x, ghostY+y, piece.color, SIZE);
+       ctx.globalAlpha = 1;
+     }
+   });
+ });
+}
+
 function draw(){
  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+ // 👁️ Draw ghost first
+ drawGhost();
 
  board.forEach((row,y)=>{
    row.forEach((val,x)=>{
@@ -173,13 +175,14 @@ function drawMini(ctx,p){
  });
 }
 
-function collision(){
- for(let y=0;y<piece.shape.length;y++){
-   for(let x=0;x<piece.shape[y].length;x++){
-     if(!piece.shape[y][x]) continue;
+// 🔥 CORE COLLISION CHECK
+function checkCollision(px, py, shape){
+ for(let y=0;y<shape.length;y++){
+   for(let x=0;x<shape[y].length;x++){
+     if(!shape[y][x]) continue;
 
-     let newX = piece.x + x;
-     let newY = piece.y + y;
+     let newX = px + x;
+     let newY = py + y;
 
      if(newX < 0 || newX >= COLS) return true;
      if(newY >= ROWS) return true;
@@ -189,16 +192,8 @@ function collision(){
  return false;
 }
 
-function canMove(dir){
- for(let y=0;y<piece.shape.length;y++){
-   for(let x=0;x<piece.shape[y].length;x++){
-     if(!piece.shape[y][x]) continue;
-
-     let newX = piece.x + x + dir;
-     if(newX < 0 || newX >= COLS) return false;
-   }
- }
- return true;
+function collision(){
+ return checkCollision(piece.x, piece.y, piece.shape);
 }
 
 function merge(){
@@ -268,8 +263,6 @@ function moveDown(){
 }
 
 function move(dir){
- if(!canMove(dir)) return;
-
  piece.x += dir;
  if(collision()) piece.x -= dir;
 }
@@ -296,7 +289,7 @@ function rotate(){
  }
 }
 
-// 🔒 HOLD SYSTEM
+// 🔒 HOLD
 function hold(){
  if(!canHold) return;
 
@@ -320,6 +313,7 @@ function endGame(){
  document.getElementById("overlay").style.display = "flex";
 }
 
+// 🎮 CONTROLS
 window.addEventListener("keydown",e=>{
  if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].includes(e.key)){
    e.preventDefault();
@@ -331,8 +325,6 @@ window.addEventListener("keydown",e=>{
  if(e.key==="ArrowRight") move(1);
  if(e.key==="ArrowDown") moveDown();
  if(e.key==="ArrowUp") rotate();
-
- // 🔒 HOLD KEY
  if(e.key==="c" || e.key==="C") hold();
 });
 
