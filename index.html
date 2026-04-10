@@ -267,7 +267,7 @@ window.addEventListener("keydown", function(e){
 // Multiplayer (safe if offline)
 let socket;
 try {
-  socket = new WebSocket("wss://your-app-name.onrender.com");
+  socket = new WebSocket("wss://tetris-server-fowt.onrender.com");
 
   socket.onmessage = (e)=>{
     let data = JSON.parse(e.data);
