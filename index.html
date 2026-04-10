@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Tetris Pro Ultimate</title>
+  <title>Tetris Pro Ultimate (Sound)</title>
   <style>
     body {
       margin:0;
@@ -32,6 +32,12 @@
       flex-direction:column;
       font-size:30px;
     }
+
+    button {
+      margin-top:10px;
+      padding:10px;
+      font-size:16px;
+    }
   </style>
 </head>
 
@@ -48,6 +54,9 @@
 
   <h3>Hold</h3>
   <canvas id="hold" width="100" height="100"></canvas>
+
+  <button onclick="toggleMute()">🔊 Mute</button>
+  <input type="range" min="0" max="1" step="0.1" value="0.5" onchange="setVolume(this.value)">
 </div>
 
 <div id="overlay">
@@ -55,26 +64,56 @@
   <button onclick="location.reload()">Restart</button>
 </div>
 
+<!-- AUDIO -->
+<audio id="bgm" src="bg.mp3" loop></audio>
+<audio id="move" src="move.wav"></audio>
+<audio id="rotate" src="rotate.wav"></audio>
+<audio id="clear" src="clear.wav"></audio>
+<audio id="drop" src="drop.wav"></audio>
+<audio id="gameover" src="gameover.wav"></audio>
+
 <script>
+// 🔊 SOUND SYSTEM
+let muted = false;
+let volume = 0.5;
+
+function playSound(id){
+ if(muted) return;
+ let s = document.getElementById(id);
+ s.currentTime = 0;
+ s.volume = volume;
+ s.play().catch(()=>{});
+}
+
+function setVolume(v){
+ volume = v;
+ document.getElementById("bgm").volume = v;
+}
+
+function toggleMute(){
+ muted = !muted;
+ document.getElementById("bgm").muted = muted;
+}
+
+// 🔓 UNLOCK AUDIO
+document.body.addEventListener("click", ()=>{
+ document.getElementById("bgm").play().catch(()=>{});
+}, { once:true });
+
+// GAME SETUP
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
+const nextCtx = document.getElementById("next").getContext("2d");
+const holdCtx = document.getElementById("hold").getContext("2d");
 
-const nextCanvas = document.getElementById("next");
-const nextCtx = nextCanvas.getContext("2d");
+const ROWS=20, COLS=10, SIZE=20;
 
-const holdCanvas = document.getElementById("hold");
-const holdCtx = holdCanvas.getContext("2d");
-
-const ROWS = 20;
-const COLS = 10;
-const SIZE = 20;
-
-let board, piece, nextPiece, holdPiece = null;
-let canHold = true;
-
+let board, piece, nextPiece, holdPiece=null;
+let canHold=true;
 let score, level, speed, gameOver;
 
-const pieces = [
+// SHAPES
+const pieces=[
  {shape:[[1,1,1,1]],color:"cyan"},
  {shape:[[1,1],[1,1]],color:"yellow"},
  {shape:[[0,1,0],[1,1,1]],color:"purple"},
@@ -85,12 +124,7 @@ const pieces = [
 ];
 
 function createPiece(p){
- return {
-   shape: p.shape.map(r => [...r]),
-   color: p.color,
-   x: Math.floor(COLS/2)-1,
-   y: 0
- };
+ return {shape:p.shape.map(r=>[...r]),color:p.color,x:3,y:0};
 }
 
 function randomPiece(){
@@ -98,15 +132,11 @@ function randomPiece(){
 }
 
 function init(){
- board = Array.from({length:ROWS},()=>Array(COLS).fill(0));
- score = 0;
- level = 1;
- speed = 500;
- gameOver = false;
+ board=Array.from({length:ROWS},()=>Array(COLS).fill(0));
+ score=0; level=1; speed=500; gameOver=false;
+ piece=randomPiece(); nextPiece=randomPiece();
 
- piece = randomPiece();
- nextPiece = randomPiece();
- holdPiece = null;
+ document.getElementById("bgm").volume = volume;
 
  updateUI();
  gameLoop();
@@ -121,128 +151,91 @@ function drawCell(ctx,x,y,color,size){
 
 // 👁️ GHOST
 function drawGhost(){
- let ghostY = piece.y;
+ let y = piece.y;
+ while(!checkCollision(piece.x,y,piece.shape)) y++;
+ y--;
 
- while(true){
-   ghostY++;
-   if(checkCollision(piece.x, ghostY, piece.shape)){
-     ghostY--;
-     break;
-   }
- }
-
- piece.shape.forEach((row,y)=>{
-   row.forEach((val,x)=>{
-     if(val){
-       ctx.globalAlpha = 0.3;
-       drawCell(ctx, piece.x+x, ghostY+y, piece.color, SIZE);
-       ctx.globalAlpha = 1;
-     }
-   });
- });
+ piece.shape.forEach((r,dy)=>r.forEach((v,dx)=>{
+  if(v){
+    ctx.globalAlpha=0.3;
+    drawCell(ctx,piece.x+dx,y+dy,piece.color,SIZE);
+    ctx.globalAlpha=1;
+  }
+ }));
 }
 
 function draw(){
  ctx.clearRect(0,0,canvas.width,canvas.height);
-
  drawGhost();
 
- board.forEach((row,y)=>{
-   row.forEach((val,x)=>{
-     if(val) drawCell(ctx,x,y,val,SIZE);
-   });
- });
+ board.forEach((r,y)=>r.forEach((v,x)=>v&&drawCell(ctx,x,y,v,SIZE)));
+ piece.shape.forEach((r,y)=>r.forEach((v,x)=>v&&drawCell(ctx,piece.x+x,piece.y+y,piece.color,SIZE)));
 
- piece.shape.forEach((row,y)=>{
-   row.forEach((val,x)=>{
-     if(val) drawCell(ctx,piece.x+x,piece.y+y,piece.color,SIZE);
-   });
- });
-
- drawMini(nextCtx, nextPiece);
- drawMini(holdCtx, holdPiece);
+ drawMini(nextCtx,nextPiece);
+ drawMini(holdCtx,holdPiece);
 }
 
 function drawMini(ctx,p){
  ctx.clearRect(0,0,100,100);
  if(!p) return;
-
- p.shape.forEach((row,y)=>{
-   row.forEach((val,x)=>{
-     if(val) drawCell(ctx,x,y,p.color,20);
-   });
- });
+ p.shape.forEach((r,y)=>r.forEach((v,x)=>v&&drawCell(ctx,x,y,p.color,20)));
 }
 
-function checkCollision(px, py, shape){
+function checkCollision(px,py,shape){
  for(let y=0;y<shape.length;y++){
-   for(let x=0;x<shape[y].length;x++){
-     if(!shape[y][x]) continue;
+  for(let x=0;x<shape[y].length;x++){
+   if(!shape[y][x]) continue;
 
-     let newX = px + x;
-     let newY = py + y;
+   let nx=px+x, ny=py+y;
 
-     if(newX < 0 || newX >= COLS) return true;
-     if(newY >= ROWS) return true;
-     if(newY >= 0 && board[newY][newX]) return true;
-   }
+   if(nx<0||nx>=COLS) return true;
+   if(ny>=ROWS) return true;
+   if(ny>=0&&board[ny][nx]) return true;
+  }
  }
  return false;
 }
 
-function collision(){
- return checkCollision(piece.x, piece.y, piece.shape);
-}
+function collision(){ return checkCollision(piece.x,piece.y,piece.shape); }
 
 function merge(){
- piece.shape.forEach((row,y)=>{
-   row.forEach((val,x)=>{
-     if(val){
-       if(piece.y+y < 0){
-         endGame();
-         return;
-       }
-       board[piece.y+y][piece.x+x] = piece.color;
-     }
-   });
- });
+ piece.shape.forEach((r,y)=>r.forEach((v,x)=>{
+  if(v){
+   if(piece.y+y<0) endGame();
+   board[piece.y+y][piece.x+x]=piece.color;
+  }
+ }));
 }
 
 function clearLines(){
- let lines = 0;
+ let lines=0;
 
- board = board.filter(row=>{
-   if(row.every(cell=>cell!==0)){
-     lines++;
-     return false;
-   }
-   return true;
+ board=board.filter(r=>{
+  if(r.every(c=>c!==0)){lines++;return false;}
+  return true;
  });
 
- while(board.length < ROWS){
-   board.unshift(Array(COLS).fill(0));
- }
+ while(board.length<ROWS) board.unshift(Array(COLS).fill(0));
 
- if(lines > 0){
-   score += lines * 10;
-   level = Math.floor(score/50)+1;
-   speed = Math.max(100,500-(level*40));
-   updateUI();
+ if(lines>0){
+  playSound("clear");
+  score+=lines*10;
+  level=Math.floor(score/50)+1;
+  speed=Math.max(100,500-(level*40));
+  updateUI();
  }
 }
 
 function updateUI(){
- document.getElementById("score").innerText = score;
- document.getElementById("level").innerText = level;
+ document.getElementById("score").innerText=score;
+ document.getElementById("level").innerText=level;
 }
 
 function spawnNext(){
- piece = nextPiece;
- piece.x = Math.floor(COLS/2)-1;
- piece.y = 0;
-
- nextPiece = randomPiece();
- canHold = true;
+ piece=nextPiece;
+ piece.x=3; piece.y=0;
+ nextPiece=randomPiece();
+ canHold=true;
 
  if(collision()) endGame();
 }
@@ -251,81 +244,62 @@ function moveDown(){
  if(gameOver) return;
 
  piece.y++;
-
  if(collision()){
-   piece.y--;
-   merge();
-   clearLines();
-   spawnNext();
+  piece.y--;
+  merge();
+  clearLines();
+  spawnNext();
  }
 }
 
-function move(dir){
- piece.x += dir;
- if(collision()) piece.x -= dir;
+function move(d){
+ piece.x+=d;
+ if(collision()) piece.x-=d;
+ else playSound("move");
 }
 
 function rotate(){
- let rotated = piece.shape[0].map((_,i)=>
-   piece.shape.map(row=>row[i]).reverse()
- );
-
- let oldX = piece.x;
- let oldShape = piece.shape;
-
- piece.shape = rotated;
-
- if(collision()){
-   piece.x++;
-   if(collision()){
-     piece.x -= 2;
-     if(collision()){
-       piece.x = oldX;
-       piece.shape = oldShape;
-     }
-   }
- }
+ let r=piece.shape[0].map((_,i)=>piece.shape.map(row=>row[i]).reverse());
+ let old=piece.shape;
+ piece.shape=r;
+ if(collision()) piece.shape=old;
+ else playSound("rotate");
 }
 
-// 🔒 HOLD
 function hold(){
  if(!canHold) return;
 
  if(!holdPiece){
-   holdPiece = createPiece(piece);
-   spawnNext();
+  holdPiece=createPiece(piece);
+  spawnNext();
  } else {
-   let temp = createPiece(piece);
-   piece = createPiece(holdPiece);
-   holdPiece = temp;
+  let t=createPiece(piece);
+  piece=createPiece(holdPiece);
+  holdPiece=t;
  }
 
- piece.x = Math.floor(COLS/2)-1;
- piece.y = 0;
-
- canHold = false;
+ canHold=false;
 }
 
-// ⚡ HARD DROP
 function hardDrop(){
- while(!collision()){
-   piece.y++;
- }
+ while(!collision()) piece.y++;
  piece.y--;
+
+ playSound("drop");
+
  merge();
  clearLines();
  spawnNext();
 }
 
 function endGame(){
- gameOver = true;
- document.getElementById("overlay").style.display = "flex";
+ gameOver=true;
+ playSound("gameover");
+ document.getElementById("overlay").style.display="flex";
 }
 
 window.addEventListener("keydown",e=>{
- if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"," "].includes(e.key)){
-   e.preventDefault();
- }
+ if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"," "].includes(e.key)) e.preventDefault();
 
  if(gameOver) return;
 
@@ -333,9 +307,7 @@ window.addEventListener("keydown",e=>{
  if(e.key==="ArrowRight") move(1);
  if(e.key==="ArrowDown") moveDown();
  if(e.key==="ArrowUp") rotate();
- if(e.key==="c" || e.key==="C") hold();
-
- // ⚡ SPACEBAR
+ if(e.key==="c"||e.key==="C") hold();
  if(e.code==="Space") hardDrop();
 });
 
@@ -344,7 +316,6 @@ function gameLoop(){
 
  moveDown();
  draw();
-
  setTimeout(gameLoop,speed);
 }
 
