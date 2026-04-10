@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Tetris Pro Fixed</title>
+  <title>Tetris Pro FINAL FIX</title>
   <style>
     body {
       margin:0;
@@ -19,9 +19,7 @@
       box-shadow:0 0 20px cyan;
     }
 
-    #panel {
-      margin-left:20px;
-    }
+    #panel { margin-left:20px; }
 
     #controls {
       position:fixed;
@@ -83,7 +81,7 @@ const SIZE = 20;
 
 let board, piece, score, level, speed, gameOver;
 
-// ✅ FULL 7 SHAPES
+// 🎯 SHAPES
 const pieces = [
  {shape:[[1,1,1,1]],color:"cyan"},
  {shape:[[1,1],[1,1]],color:"yellow"},
@@ -138,7 +136,7 @@ function draw(){
  });
 }
 
-// ✅ PERFECT COLLISION
+// ✅ COLLISION (UNCHANGED)
 function collision(){
  for(let y=0;y<piece.shape.length;y++){
    for(let x=0;x<piece.shape[y].length;x++){
@@ -154,6 +152,21 @@ function collision(){
    }
  }
  return false;
+}
+
+// ✅ NEW: CHECK WIDTH BEFORE MOVING
+function canMove(dir){
+ for(let y=0;y<piece.shape.length;y++){
+   for(let x=0;x<piece.shape[y].length;x++){
+
+     if(!piece.shape[y][x]) continue;
+
+     let newX = piece.x + x + dir;
+
+     if(newX < 0 || newX >= COLS) return false;
+   }
+ }
+ return true;
 }
 
 function merge(){
@@ -213,7 +226,10 @@ function moveDown(){
  }
 }
 
+// ✅ FIXED MOVE (RIGHT WALL PERFECT)
 function move(dir){
+ if(!canMove(dir)) return;
+
  piece.x += dir;
 
  if(collision()){
@@ -221,7 +237,7 @@ function move(dir){
  }
 }
 
-// ✅ ROTATION WITH WALL KICK
+// ✅ ROTATION
 function rotate(){
  let rotated = piece.shape[0].map((_,i)=>
    piece.shape.map(row=>row[i]).reverse()
