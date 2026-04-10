@@ -61,7 +61,7 @@ let board, piece, nextPiece;
 let gameStarted=false, gameOver=false;
 
 // 🌐 CONNECT
-let socket = new WebSocket("wss://your-app-name.onrender.com");
+let socket = new WebSocket("wss://tetris-server-fowt.onrender.com");
 
 socket.onmessage = (e)=>{
  let data = JSON.parse(e.data);
