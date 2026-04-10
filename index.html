@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Tetris Stable</title>
+  <title>Tetris Battle Pro</title>
   <style>
     body {
       margin:0;
@@ -16,198 +16,316 @@
 
     canvas {
       background:black;
-      box-shadow:0 0 20px cyan;
+      box-shadow:0 0 15px cyan;
+      margin:5px;
     }
 
-    #startBtn {
+    #panel { margin-left:20px; }
+
+    #controls {
       position:fixed;
-      top:20px;
-      left:20px;
-      padding:12px;
-      background:lime;
-      border:none;
-      cursor:pointer;
-      z-index:10;
+      bottom:20px;
+      display:flex;
+      gap:10px;
     }
 
-    #overlay {
+    #controls button {
+      padding:15px;
+      font-size:20px;
+      background:#0ff;
+      border:none;
+      border-radius:8px;
+    }
+
+    #overlay, #startScreen {
       position:fixed;
       width:100%;
       height:100%;
       background:rgba(0,0,0,0.9);
-      display:none;
+      display:flex;
       justify-content:center;
       align-items:center;
       flex-direction:column;
       font-size:30px;
     }
+
+    #overlay { display:none; }
   </style>
 </head>
 
 <body>
 
-<button id="startBtn" onclick="startGame()">START GAME</button>
-
 <canvas id="game" width="240" height="400"></canvas>
+<canvas id="opponent" width="120" height="200"></canvas>
+
+<div id="panel">
+  <h2>Score: <span id="score">0</span></h2>
+  <h3>Level: <span id="level">1</span></h3>
+  <h3 id="status">Connecting...</h3>
+</div>
+
+<div id="controls">
+  <button onclick="move(-1)">⬅️</button>
+  <button onclick="rotate()">🔄</button>
+  <button onclick="move(1)">➡️</button>
+  <button onclick="moveDown()">⬇️</button>
+</div>
+
+<div id="startScreen">
+  <button onclick="readyUp()">READY</button>
+  <div id="countdown"></div>
+</div>
 
 <div id="overlay">
   <div>GAME OVER</div>
   <button onclick="location.reload()">Restart</button>
 </div>
 
+<!-- AUDIO -->
+<audio id="bgm" src="bg.mp3" loop></audio>
+<audio id="moveSound" src="move.wav"></audio>
+<audio id="rotateSound" src="rotate.wav"></audio>
+<audio id="clearSound" src="clear.wav"></audio>
+<audio id="gameOverSound" src="gameover.wav"></audio>
+
 <script>
+// 🔊 UNLOCK AUDIO (VERY IMPORTANT FIX)
+document.body.addEventListener("click", () => {
+  document.getElementById("bgm").play().catch(()=>{});
+}, { once: true });
+
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
+const oppCanvas = document.getElementById("opponent");
+const oppCtx = oppCanvas.getContext("2d");
 
-const ROWS = 20;
-const COLS = 10;
-const SIZE = 20;
+const ROWS=20, COLS=10, SIZE=20;
 
-let board, piece;
-let gameStarted = false;
-let gameOver = false;
+let board, piece, score, level, speed;
+let gameOver=false, gameStarted=false;
 
-// ✅ SAFE SHAPES (NOT MODIFIED)
-const SHAPES = [
- [[1,1,1,1]],
- [[1,1],[1,1]],
- [[0,1,0],[1,1,1]],
- [[0,1,1],[1,1,0]],
- [[1,1,0],[0,1,1]],
- [[1,0,0],[1,1,1]],
- [[0,0,1],[1,1,1]]
+// 🎯 SHAPES
+const pieces=[
+ {shape:[[1,1,1,1]],color:"cyan"},
+ {shape:[[1,1],[1,1]],color:"yellow"},
+ {shape:[[0,1,0],[1,1,1]],color:"purple"},
+ {shape:[[0,1,1],[1,1,0]],color:"green"},
+ {shape:[[1,1,0],[0,1,1]],color:"red"},
+ {shape:[[1,0,0],[1,1,1]],color:"blue"},
+ {shape:[[0,0,1],[1,1,1]],color:"orange"}
 ];
 
-const COLORS = ["cyan","yellow","purple","green","red","blue","orange"];
-
-// ✅ CLONE FIX
-function clone(shape){
-  return shape.map(row => [...row]);
-}
-
-function randomPiece(){
-  let i = Math.floor(Math.random()*SHAPES.length);
-
-  return {
-    shape: clone(SHAPES[i]),
-    color: COLORS[i],
-    x: Math.floor((COLS - SHAPES[i][0].length)/2),
-    y: 0
-  };
+function playSound(id){
+ let s = document.getElementById(id);
+ s.currentTime = 0;
+ s.play().catch(()=>{});
 }
 
 function init(){
-  board = Array.from({length:ROWS},()=>Array(COLS).fill(0));
-  piece = randomPiece();
+ board=Array.from({length:ROWS},()=>Array(COLS).fill(0));
+ score=0; level=1; speed=500;
+ gameOver=false; gameStarted=false;
+ piece=randomPiece();
+ updateUI();
 }
 
-function drawCell(x,y,color){
-  ctx.fillStyle = color;
-  ctx.fillRect(x*SIZE,y*SIZE,SIZE,SIZE);
-  ctx.strokeStyle="#111";
-  ctx.strokeRect(x*SIZE,y*SIZE,SIZE,SIZE);
+function randomPiece(){
+ let p=pieces[Math.floor(Math.random()*pieces.length)];
+ return {shape:p.shape,color:p.color,x:3,y:0};
+}
+
+function drawCell(ctx,x,y,color,size){
+ ctx.fillStyle=color;
+ ctx.fillRect(x*size,y*size,size,size);
+ ctx.strokeStyle="#111";
+ ctx.strokeRect(x*size,y*size,size,size);
 }
 
 function draw(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-
-  board.forEach((row,y)=>{
-    row.forEach((val,x)=>{
-      if(val) drawCell(x,y,val);
-    });
-  });
-
-  piece.shape.forEach((row,y)=>{
-    row.forEach((val,x)=>{
-      if(val) drawCell(piece.x+x,piece.y+y,piece.color);
-    });
-  });
+ ctx.clearRect(0,0,canvas.width,canvas.height);
+ board.forEach((r,y)=>r.forEach((v,x)=>v&&drawCell(ctx,x,y,v,SIZE)));
+ piece.shape.forEach((r,y)=>r.forEach((v,x)=>v&&drawCell(ctx,piece.x+x,piece.y+y,piece.color,SIZE)));
 }
 
-// ✅ PERFECT COLLISION
-function collision(){
-  for(let y=0;y<piece.shape.length;y++){
-    for(let x=0;x<piece.shape[y].length;x++){
-      if(piece.shape[y][x]){
-        let newX = piece.x + x;
-        let newY = piece.y + y;
+function drawOpponent(data){
+ oppCtx.clearRect(0,0,oppCanvas.width,oppCanvas.height);
+ data.board.forEach((r,y)=>r.forEach((v,x)=>v&&drawCell(oppCtx,x,y,"red",10)));
+}
 
-        if(newX < 0 || newX >= COLS) return true;
-        if(newY >= ROWS) return true;
-        if(newY >= 0 && board[newY][newX]) return true;
-      }
-    }
-  }
+// ✅ FIXED COLLISION
+function collision(){
+ return piece.shape.some((r,y)=>r.some((v,x)=>{
+  if(!v) return false;
+  let newX=piece.x+x;
+  let newY=piece.y+y;
+
+  if(newX<0||newX>=COLS) return true;
+  if(newY>=ROWS) return true;
+  if(newY>=0&&board[newY][newX]) return true;
+
   return false;
+ }));
 }
 
 function merge(){
-  piece.shape.forEach((row,y)=>{
-    row.forEach((val,x)=>{
-      if(val){
-        if(piece.y+y < 0) gameOver = true;
-        board[piece.y+y][piece.x+x] = piece.color;
-      }
-    });
-  });
+ piece.shape.forEach((r,y)=>r.forEach((v,x)=>{
+  if(v){
+   if(piece.y+y<0) endGame();
+   board[piece.y+y][piece.x+x]=piece.color;
+  }
+ }));
+}
+
+function addGarbage(lines){
+ for(let i=0;i<lines;i++){
+  board.shift();
+  let row=Array(COLS).fill("gray");
+  row[Math.floor(Math.random()*COLS)]=0;
+  board.push(row);
+ }
+}
+
+function clearLines(){
+ let lines=0;
+
+ board=board.filter(r=>{
+  if(r.every(c=>c!==0)){lines++;return false;}
+  return true;
+ });
+
+ while(board.length<ROWS) board.unshift(Array(COLS).fill(0));
+
+ if(lines>0){
+  playSound("clearSound");
+  score+=lines*10;
+  sendAttack(lines);
+
+  level=Math.floor(score/50)+1;
+  speed=Math.max(100,500-(level*40));
+  updateUI();
+ }
+}
+
+function updateUI(){
+ document.getElementById("score").innerText=score;
+ document.getElementById("level").innerText=level;
 }
 
 function moveDown(){
-  if(!gameStarted || gameOver) return;
+ if(gameOver||!gameStarted) return;
 
-  piece.y++;
-
-  if(collision()){
-    piece.y--;
-    merge();
-    piece = randomPiece();
-
-    if(collision()) gameOver = true;
-  }
+ piece.y++;
+ if(collision()){
+  piece.y--;
+  merge();
+  clearLines();
+  piece=randomPiece();
+  if(collision()) endGame();
+ }
 }
 
-function move(dir){
-  piece.x += dir;
-
-  if(collision()){
-    piece.x -= dir;
-  }
+function move(d){
+ piece.x+=d;
+ if(collision()) piece.x-=d;
+ else playSound("moveSound");
 }
 
-// ✅ SAFE ROTATION
 function rotate(){
-  let rotated = piece.shape[0].map((_,i)=>
-    piece.shape.map(row=>row[i]).reverse()
-  );
+ let rotated=piece.shape[0].map((_,i)=>piece.shape.map(r=>r[i]).reverse());
+ let oldX=piece.x, oldShape=piece.shape;
 
-  let old = piece.shape;
-  piece.shape = rotated;
+ piece.shape=rotated;
 
+ if(collision()){
+  piece.x++;
   if(collision()){
-    piece.shape = old;
+   piece.x-=2;
+   if(collision()){
+    piece.x=oldX;
+    piece.shape=oldShape;
+   }
   }
+ } else {
+  playSound("rotateSound");
+ }
 }
 
+function endGame(){
+ gameOver=true;
+ document.getElementById("overlay").style.display="flex";
+ playSound("gameOverSound");
+}
+
+// 🎮 CONTROLS
 window.addEventListener("keydown",e=>{
-  if(e.key==="ArrowLeft") move(-1);
-  if(e.key==="ArrowRight") move(1);
-  if(e.key==="ArrowDown") moveDown();
-  if(e.key==="ArrowUp") rotate();
+ if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].includes(e.key)) e.preventDefault();
+ if(e.key==="ArrowLeft") move(-1);
+ if(e.key==="ArrowRight") move(1);
+ if(e.key==="ArrowDown") moveDown();
+ if(e.key==="ArrowUp") rotate();
 });
 
+// 🌐 MULTIPLAYER
+let socket=new WebSocket("wss://tetris-server-fowt.onrender.com");
+
+socket.onopen=()=>document.getElementById("status").innerText="🟢 Online";
+
+socket.onmessage=(e)=>{
+ let data=JSON.parse(e.data);
+
+ if(data.type==="state") drawOpponent(data);
+ if(data.type==="attack") addGarbage(data.lines);
+ if(data.type==="start") startCountdown();
+};
+
+function sendState(){
+ if(socket.readyState===1){
+  socket.send(JSON.stringify({type:"state",board}));
+ }
+}
+
+function sendAttack(lines){
+ if(socket.readyState===1){
+  socket.send(JSON.stringify({type:"attack",lines}));
+ }
+}
+
+// ⏳ READY SYSTEM
+function readyUp(){
+ socket.send(JSON.stringify({type:"ready"}));
+ document.getElementById("countdown").innerText="Waiting...";
+}
+
+function startCountdown(){
+ let c=3;
+ let el=document.getElementById("countdown");
+
+ let t=setInterval(()=>{
+  el.innerText=c;
+  c--;
+
+  if(c<0){
+   clearInterval(t);
+   document.getElementById("startScreen").style.display="none";
+   startGame();
+  }
+ },1000);
+}
+
 function startGame(){
-  gameStarted = true;
-  document.getElementById("startBtn").style.display="none";
-  gameLoop();
+ gameStarted=true;
+ document.getElementById("bgm").play().catch(()=>{});
+ gameLoop();
 }
 
 function gameLoop(){
-  if(!gameStarted || gameOver) return;
+ if(gameOver||!gameStarted) return;
 
-  moveDown();
-  draw();
+ moveDown();
+ draw();
+ sendState();
 
-  setTimeout(gameLoop, 500);
+ setTimeout(gameLoop,speed);
 }
 
 init();
