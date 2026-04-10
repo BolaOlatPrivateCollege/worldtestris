@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Tetris Working</title>
+  <title>Tetris Fixed</title>
   <style>
     body {
       margin:0;
@@ -19,74 +19,23 @@
       box-shadow:0 0 20px cyan;
     }
 
-    #panel { margin-left:20px; }
-
-    #controls {
-      position:fixed;
-      bottom:20px;
-      display:flex;
-      gap:10px;
-    }
-
-    #controls button {
-      padding:15px;
-      font-size:20px;
-      background:#0ff;
-      border:none;
-      border-radius:8px;
-    }
-
-    /* SIMPLE START BUTTON (NO OVERLAY BUG) */
     #startBtn {
       position:fixed;
       top:20px;
       left:20px;
-      padding:15px;
-      font-size:16px;
+      padding:12px;
       background:lime;
       border:none;
       cursor:pointer;
-      z-index:100;
-    }
-
-    #overlay {
-      position:fixed;
-      width:100%;
-      height:100%;
-      background:rgba(0,0,0,0.9);
-      display:none;
-      justify-content:center;
-      align-items:center;
-      flex-direction:column;
-      font-size:30px;
     }
   </style>
 </head>
 
 <body>
 
-<button id="startBtn" onclick="startGame()">START GAME</button>
+<button id="startBtn" onclick="startGame()">START</button>
 
 <canvas id="game" width="240" height="400"></canvas>
-
-<div id="panel">
-  <h2>Score: <span id="score">0</span></h2>
-  <h3>Level: <span id="level">1</span></h3>
-</div>
-
-<div id="controls">
-  <button onclick="move(-1)">⬅️</button>
-  <button onclick="rotate()">🔄</button>
-  <button onclick="move(1)">➡️</button>
-  <button onclick="moveDown()">⬇️</button>
-</div>
-
-<div id="overlay">
-  <div>GAME OVER</div>
-  <button onclick="location.reload()">Restart</button>
-</div>
-
-<audio id="bgm" src="bg.mp3" loop></audio>
 
 <script>
 const canvas = document.getElementById("game");
@@ -96,142 +45,149 @@ const ROWS = 20;
 const COLS = 10;
 const SIZE = 20;
 
-let board, piece, score, level, speed;
-let gameStarted = false;
-let gameOver = false;
+let board, piece;
+let gameStarted=false, gameOver=false;
 
-const pieces = [
- {shape:[[1,1,1,1]],color:"cyan"},
- {shape:[[1,1],[1,1]],color:"yellow"},
- {shape:[[0,1,0],[1,1,1]],color:"purple"},
- {shape:[[0,1,1],[1,1,0]],color:"green"},
- {shape:[[1,1,0],[0,1,1]],color:"red"},
- {shape:[[1,0,0],[1,1,1]],color:"blue"},
- {shape:[[0,0,1],[1,1,1]],color:"orange"}
+// ✅ ORIGINAL SHAPES (NEVER MUTATE THESE)
+const SHAPES = [
+ [[1,1,1,1]],                 // I
+ [[1,1],[1,1]],               // O
+ [[0,1,0],[1,1,1]],           // T
+ [[0,1,1],[1,1,0]],           // S
+ [[1,1,0],[0,1,1]],           // Z
+ [[1,0,0],[1,1,1]],           // J
+ [[0,0,1],[1,1,1]]            // L
 ];
 
-function init(){
- board = Array.from({length:ROWS},()=>Array(COLS).fill(0));
- score = 0;
- level = 1;
- speed = 500;
- gameOver = false;
- piece = randomPiece();
+const COLORS = ["cyan","yellow","purple","green","red","blue","orange"];
+
+function cloneShape(shape){
+  return shape.map(row => [...row]); // ✅ FIX
 }
 
 function randomPiece(){
- let p = pieces[Math.floor(Math.random()*pieces.length)];
- return {
-  shape:p.shape,
-  color:p.color,
-  x: Math.floor((COLS - p.shape[0].length)/2),
-  y: 0
- };
+  let i = Math.floor(Math.random()*SHAPES.length);
+
+  return {
+    shape: cloneShape(SHAPES[i]), // ✅ CLONE
+    color: COLORS[i],
+    x: Math.floor((COLS - SHAPES[i][0].length)/2),
+    y: 0
+  };
+}
+
+function init(){
+  board = Array.from({length:ROWS},()=>Array(COLS).fill(0));
+  piece = randomPiece();
 }
 
 function drawCell(x,y,color){
- ctx.fillStyle=color;
- ctx.fillRect(x*SIZE,y*SIZE,SIZE,SIZE);
+  ctx.fillStyle=color;
+  ctx.fillRect(x*SIZE,y*SIZE,SIZE,SIZE);
+  ctx.strokeStyle="#111";
+  ctx.strokeRect(x*SIZE,y*SIZE,SIZE,SIZE);
 }
 
 function draw(){
- ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.clearRect(0,0,canvas.width,canvas.height);
 
- board.forEach((row,y)=>{
-  row.forEach((val,x)=>{
-    if(val) drawCell(x,y,val);
+  board.forEach((row,y)=>{
+    row.forEach((val,x)=>{
+      if(val) drawCell(x,y,val);
+    });
   });
- });
 
- piece.shape.forEach((row,y)=>{
-  row.forEach((val,x)=>{
-    if(val) drawCell(piece.x+x,piece.y+y,piece.color);
+  piece.shape.forEach((row,y)=>{
+    row.forEach((val,x)=>{
+      if(val) drawCell(piece.x+x,piece.y+y,piece.color);
+    });
   });
- });
 }
 
+// ✅ PERFECT COLLISION
 function collision(){
- return piece.shape.some((row,y)=>
-  row.some((val,x)=>{
-    if(!val) return false;
-    let newX = piece.x + x;
-    let newY = piece.y + y;
-    if(newX<0||newX>=COLS||newY>=ROWS) return true;
-    if(newY>=0 && board[newY][newX]) return true;
-    return false;
-  })
- );
+  for(let y=0;y<piece.shape.length;y++){
+    for(let x=0;x<piece.shape[y].length;x++){
+      if(piece.shape[y][x]){
+        let newX = piece.x + x;
+        let newY = piece.y + y;
+
+        if(newX < 0 || newX >= COLS) return true;
+        if(newY >= ROWS) return true;
+        if(newY >= 0 && board[newY][newX]) return true;
+      }
+    }
+  }
+  return false;
 }
 
 function merge(){
- piece.shape.forEach((row,y)=>{
-  row.forEach((val,x)=>{
-    if(val){
-      if(piece.y+y<0) endGame();
-      board[piece.y+y][piece.x+x]=piece.color;
-    }
+  piece.shape.forEach((row,y)=>{
+    row.forEach((val,x)=>{
+      if(val){
+        if(piece.y+y < 0) gameOver=true;
+        board[piece.y+y][piece.x+x] = piece.color;
+      }
+    });
   });
- });
 }
 
 function moveDown(){
- if(!gameStarted||gameOver) return;
+  if(!gameStarted || gameOver) return;
 
- piece.y++;
- if(collision()){
-  piece.y--;
-  merge();
-  piece=randomPiece();
-  if(collision()) endGame();
- }
+  piece.y++;
+
+  if(collision()){
+    piece.y--;
+    merge();
+    piece = randomPiece();
+
+    if(collision()) gameOver=true;
+  }
 }
 
-function move(d){
- piece.x+=d;
- if(collision()) piece.x-=d;
+function move(dir){
+  piece.x += dir;
+
+  if(collision()){
+    piece.x -= dir;
+  }
 }
 
+// ✅ SAFE ROTATION (NO SHAPE DAMAGE)
 function rotate(){
- let rotated = piece.shape[0].map((_,i)=>
-  piece.shape.map(row=>row[i]).reverse()
- );
- let old=piece.shape;
- piece.shape=rotated;
- if(collision()) piece.shape=old;
-}
+  let newShape = piece.shape[0].map((_,i)=>
+    piece.shape.map(row=>row[i]).reverse()
+  );
 
-function endGame(){
- gameOver=true;
- document.getElementById("overlay").style.display="flex";
+  let old = piece.shape;
+  piece.shape = newShape;
+
+  if(collision()){
+    piece.shape = old;
+  }
 }
 
 window.addEventListener("keydown",e=>{
- if(e.key==="ArrowLeft") move(-1);
- if(e.key==="ArrowRight") move(1);
- if(e.key==="ArrowDown") moveDown();
- if(e.key==="ArrowUp") rotate();
+  if(e.key==="ArrowLeft") move(-1);
+  if(e.key==="ArrowRight") move(1);
+  if(e.key==="ArrowDown") moveDown();
+  if(e.key==="ArrowUp") rotate();
 });
 
 function startGame(){
- console.log("START WORKED");
-
- gameStarted=true;
-
- // play sound safely
- document.getElementById("bgm").play().catch(()=>{});
-
- document.getElementById("startBtn").style.display="none";
-
- gameLoop();
+  gameStarted = true;
+  document.getElementById("startBtn").style.display="none";
+  gameLoop();
 }
 
 function gameLoop(){
- if(!gameStarted||gameOver) return;
+  if(!gameStarted || gameOver) return;
 
- moveDown();
- draw();
+  moveDown();
+  draw();
 
- setTimeout(gameLoop,500);
+  setTimeout(gameLoop, 500);
 }
 
 init();
