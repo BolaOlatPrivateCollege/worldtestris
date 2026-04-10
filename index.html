@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Tetris Pro UI Upgrade</title>
+  <title>Tetris Pro Vibration</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 
   <style>
@@ -54,20 +54,13 @@
       border-radius:10px;
       background:#0ff;
       color:black;
-
-      /* 🔥 SMOOTH EFFECT */
       transition: transform 0.1s ease, box-shadow 0.1s ease;
+      -webkit-tap-highlight-color: transparent;
     }
 
-    /* 👆 PRESS EFFECT */
     #controls button:active {
       transform: scale(1.2);
       box-shadow: 0 0 15px cyan;
-    }
-
-    /* 📱 TOUCH FEEDBACK FIX */
-    #controls button {
-      -webkit-tap-highlight-color: transparent;
     }
 
     #overlay {
@@ -100,12 +93,12 @@
     <canvas id="hold" width="100" height="100"></canvas>
 
     <div id="controls">
-      <button onclick="move(-1)">⬅️</button>
-      <button onclick="move(1)">➡️</button>
-      <button onclick="rotate()">🔄</button>
-      <button onclick="moveDown()">⬇️</button>
-      <button onclick="hardDrop()">⚡</button>
-      <button onclick="hold()">🧊</button>
+      <button onclick="press(()=>move(-1))">⬅️</button>
+      <button onclick="press(()=>move(1))">➡️</button>
+      <button onclick="press(()=>rotate())">🔄</button>
+      <button onclick="press(()=>moveDown())">⬇️</button>
+      <button onclick="press(()=>hardDrop())">⚡</button>
+      <button onclick="press(()=>hold())">🧊</button>
     </div>
   </div>
 
@@ -117,7 +110,20 @@
 </div>
 
 <script>
-// (Game logic unchanged — keep your existing JS here)
+// 📳 VIBRATION FUNCTION
+function vibrate(ms = 30){
+  if(navigator.vibrate){
+    navigator.vibrate(ms);
+  }
+}
+
+// 🔥 WRAPPER FOR BUTTON ACTIONS
+function press(action){
+  vibrate(30); // light tap
+  action();
+}
+
+// (Keep your FULL game logic below this line unchanged)
 </script>
 
 </body>
