@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Tetris Ultimate Final</title>
+  <title>Tetris Pro Ultimate</title>
   <style>
     body {
       margin:0;
@@ -17,10 +17,9 @@
     canvas {
       background:black;
       box-shadow:0 0 20px cyan;
-      margin:5px;
     }
 
-    #panel { margin-left:20px; }
+    #panel { margin-left:20px; width:200px; }
 
     #overlay {
       position:fixed;
@@ -31,6 +30,26 @@
       justify-content:center;
       align-items:center;
       flex-direction:column;
+      font-size:24px;
+    }
+
+    input {
+      padding:10px;
+      margin-top:10px;
+      font-size:16px;
+    }
+
+    button {
+      margin-top:10px;
+      padding:10px;
+      font-size:16px;
+    }
+
+    #leaderboard {
+      margin-top:20px;
+      background:#111;
+      padding:10px;
+      border-radius:10px;
     }
   </style>
 </head>
@@ -38,54 +57,42 @@
 <body>
 
 <canvas id="game" width="200" height="400"></canvas>
-<canvas id="opponent" width="120" height="200"></canvas>
 
 <div id="panel">
+  <h2>Score: <span id="score">0</span></h2>
+  <h3>Level: <span id="level">1</span></h3>
+
   <h3>Next</h3>
   <canvas id="next" width="100" height="100"></canvas>
 
   <h3>Hold</h3>
   <canvas id="hold" width="100" height="100"></canvas>
+
+  <div id="leaderboard">
+    <h3>🏆 Top Scores</h3>
+    <ol id="scores"></ol>
+  </div>
 </div>
 
 <div id="overlay">
-  <h1>GAME OVER</h1>
-  <button onclick="location.reload()">Restart</button>
+  <div>GAME OVER</div>
+  <input id="playerName" placeholder="Enter your name"/>
+  <button onclick="saveScore()">Save Score</button>
 </div>
 
-<!-- SOUND -->
-<audio id="bgm" src="bg.mp3" loop></audio>
-<audio id="move" src="move.wav"></audio>
-<audio id="rotate" src="rotate.wav"></audio>
-<audio id="clear" src="clear.wav"></audio>
-<audio id="drop" src="drop.wav"></audio>
-<audio id="gameover" src="gameover.wav"></audio>
-
 <script>
-// 🔊 SOUND SYSTEM
-function playSound(id){
- let s=document.getElementById(id);
- s.currentTime=0;
- s.play().catch(()=>{});
-}
-
-// unlock audio
-document.body.addEventListener("click",()=>{
- document.getElementById("bgm").play().catch(()=>{});
-},{once:true});
-
-// ================= GAME =================
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
-const oppCtx = document.getElementById("opponent").getContext("2d");
 const nextCtx = document.getElementById("next").getContext("2d");
 const holdCtx = document.getElementById("hold").getContext("2d");
 
 const ROWS=20, COLS=10, SIZE=20;
 
-let board,piece,nextPiece,holdPiece=null;
-let canHold=true,gameOver=false;
+let board, piece, nextPiece, holdPiece=null;
+let canHold=true;
+let score, level, speed, gameOver;
 
+// 🎯 SHAPES
 const pieces=[
  {shape:[[1,1,1,1]],color:"cyan"},
  {shape:[[1,1],[1,1]],color:"yellow"},
@@ -106,11 +113,14 @@ function randomPiece(){
 
 function init(){
  board=Array.from({length:ROWS},()=>Array(COLS).fill(0));
- piece=randomPiece();
- nextPiece=randomPiece();
+ score=0; level=1; speed=500; gameOver=false;
+ piece=randomPiece(); nextPiece=randomPiece();
+
+ updateUI();
+ loadScores();
+ gameLoop();
 }
 
-// 🎨 DRAW CELL (RESTORED DESIGN)
 function drawCell(ctx,x,y,color,size){
  ctx.fillStyle=color;
  ctx.fillRect(x*size,y*size,size,size);
@@ -118,42 +128,14 @@ function drawCell(ctx,x,y,color,size){
  ctx.strokeRect(x*size,y*size,size,size);
 }
 
-// 👁️ GHOST
-function drawGhost(){
- let y=piece.y;
- while(!collision(piece.x,y,piece.shape)) y++;
- y--;
-
- piece.shape.forEach((r,dy)=>r.forEach((v,dx)=>{
-  if(v){
-    ctx.globalAlpha=0.3;
-    drawCell(ctx,piece.x+dx,y+dy,piece.color,SIZE);
-    ctx.globalAlpha=1;
-  }
- }));
-}
-
 function draw(){
  ctx.clearRect(0,0,canvas.width,canvas.height);
 
- drawGhost();
-
  board.forEach((r,y)=>r.forEach((v,x)=>v&&drawCell(ctx,x,y,v,SIZE)));
-
  piece.shape.forEach((r,y)=>r.forEach((v,x)=>v&&drawCell(ctx,piece.x+x,piece.y+y,piece.color,SIZE)));
 
  drawMini(nextCtx,nextPiece);
  drawMini(holdCtx,holdPiece);
-}
-
-// opponent
-function drawOpponent(b){
- oppCtx.clearRect(0,0,120,200);
- b.forEach((r,y)=>r.forEach((v,x)=>{
-  if(v){
-    drawCell(oppCtx,x,y,"red",10);
-  }
- }));
 }
 
 function drawMini(ctx,p){
@@ -162,25 +144,66 @@ function drawMini(ctx,p){
  p.shape.forEach((r,y)=>r.forEach((v,x)=>v&&drawCell(ctx,x,y,p.color,20)));
 }
 
-// COLLISION
-function collision(px,py,shape){
+function checkCollision(px,py,shape){
  for(let y=0;y<shape.length;y++){
   for(let x=0;x<shape[y].length;x++){
    if(!shape[y][x]) continue;
-
    let nx=px+x, ny=py+y;
 
-   if(nx<0||nx>=COLS||ny>=ROWS) return true;
+   if(nx<0||nx>=COLS) return true;
+   if(ny>=ROWS) return true;
    if(ny>=0&&board[ny][nx]) return true;
   }
  }
  return false;
 }
 
-// GAME LOGIC
+function collision(){ return checkCollision(piece.x,piece.y,piece.shape); }
+
+function merge(){
+ piece.shape.forEach((r,y)=>r.forEach((v,x)=>{
+  if(v){
+   if(piece.y+y<0) endGame();
+   board[piece.y+y][piece.x+x]=piece.color;
+  }
+ }));
+}
+
+function clearLines(){
+ let lines=0;
+ board=board.filter(r=>{
+  if(r.every(c=>c!==0)){lines++;return false;}
+  return true;
+ });
+ while(board.length<ROWS) board.unshift(Array(COLS).fill(0));
+
+ if(lines>0){
+  score+=lines*10;
+  level=Math.floor(score/50)+1;
+  speed=Math.max(100,500-(level*40));
+  updateUI();
+ }
+}
+
+function updateUI(){
+ document.getElementById("score").innerText=score;
+ document.getElementById("level").innerText=level;
+}
+
+function spawnNext(){
+ piece=nextPiece;
+ piece.x=3; piece.y=0;
+ nextPiece=randomPiece();
+ canHold=true;
+
+ if(collision()) endGame();
+}
+
 function moveDown(){
+ if(gameOver) return;
+
  piece.y++;
- if(collision(piece.x,piece.y,piece.shape)){
+ if(collision()){
   piece.y--;
   merge();
   clearLines();
@@ -190,50 +213,14 @@ function moveDown(){
 
 function move(d){
  piece.x+=d;
- if(collision(piece.x,piece.y,piece.shape)) piece.x-=d;
- else playSound("move");
+ if(collision()) piece.x-=d;
 }
 
 function rotate(){
  let r=piece.shape[0].map((_,i)=>piece.shape.map(row=>row[i]).reverse());
  let old=piece.shape;
  piece.shape=r;
- if(collision(piece.x,piece.y,piece.shape)) piece.shape=old;
- else playSound("rotate");
-}
-
-function merge(){
- piece.shape.forEach((r,y)=>r.forEach((v,x)=>{
-  if(v){
-    if(piece.y+y<0) endGame();
-    board[piece.y+y][piece.x+x]=piece.color;
-  }
- }));
-}
-
-function spawnNext(){
- piece=nextPiece;
- piece.x=3; piece.y=0;
- nextPiece=randomPiece();
- canHold=true;
-
- if(collision(piece.x,piece.y,piece.shape)) endGame();
-}
-
-function clearLines(){
- let lines=0;
-
- board=board.filter(r=>{
-  if(r.every(c=>c)){lines++;return false;}
-  return true;
- });
-
- while(board.length<ROWS) board.unshift(Array(COLS).fill(0));
-
- if(lines>0){
-  playSound("clear");
-  sendAttack(lines);
- }
+ if(collision()) piece.shape=old;
 }
 
 function hold(){
@@ -251,75 +238,59 @@ function hold(){
  canHold=false;
 }
 
-function hardDrop(){
- while(!collision(piece.x,piece.y,piece.shape)) piece.y++;
- piece.y--;
- playSound("drop");
- merge();
- clearLines();
- spawnNext();
-}
-
 function endGame(){
  gameOver=true;
- playSound("gameover");
  document.getElementById("overlay").style.display="flex";
 }
 
-// ================= MULTIPLAYER =================
-let socket = new WebSocket("wss://tetris-server-fowt.onrender.com");
+// 🏆 LEADERBOARD
+function saveScore(){
+ let name=document.getElementById("playerName").value || "Player";
+ let scores=JSON.parse(localStorage.getItem("tetrisScores"))||[];
 
-socket.onmessage=(e)=>{
- let data=JSON.parse(e.data);
+ scores.push({name,score});
+ scores.sort((a,b)=>b.score-a.score);
+ scores=scores.slice(0,5);
 
- if(data.type==="state") drawOpponent(data.board);
- if(data.type==="attack") addGarbage(data.lines);
-};
+ localStorage.setItem("tetrisScores",JSON.stringify(scores));
 
-function sendState(){
- if(socket.readyState===1){
-  socket.send(JSON.stringify({type:"state",board}));
- }
+ location.reload();
 }
 
-function sendAttack(lines){
- if(socket.readyState===1){
-  socket.send(JSON.stringify({type:"attack",lines}));
- }
+function loadScores(){
+ let scores=JSON.parse(localStorage.getItem("tetrisScores"))||[];
+ let list=document.getElementById("scores");
+ list.innerHTML="";
+
+ scores.forEach(s=>{
+  let li=document.createElement("li");
+  li.innerText=`${s.name} - ${s.score}`;
+  list.appendChild(li);
+ });
 }
 
-function addGarbage(lines){
- for(let i=0;i<lines;i++){
-  board.shift();
-  let row=Array(COLS).fill("gray");
-  row[Math.floor(Math.random()*COLS)]=0;
-  board.push(row);
- }
-}
+window.addEventListener("keydown",e=>{
+ if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].includes(e.key)) e.preventDefault();
 
-// LOOP
-function gameLoop(){
  if(gameOver) return;
 
- moveDown();
- draw();
- sendState();
-
- setTimeout(gameLoop,400);
-}
-
-// CONTROLS
-window.addEventListener("keydown",e=>{
  if(e.key==="ArrowLeft") move(-1);
  if(e.key==="ArrowRight") move(1);
  if(e.key==="ArrowDown") moveDown();
  if(e.key==="ArrowUp") rotate();
  if(e.key==="c"||e.key==="C") hold();
- if(e.code==="Space") hardDrop();
 });
 
+function gameLoop(){
+ if(gameOver) return;
+
+ moveDown();
+ draw();
+
+ setTimeout(gameLoop,speed);
+}
+
 init();
-gameLoop();
 </script>
 
 </body>
