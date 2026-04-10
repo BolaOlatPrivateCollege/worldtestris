@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Tetris Pro Ultimate (Sound)</title>
+  <title>Tetris Multiplayer Final</title>
   <style>
     body {
       margin:0;
@@ -16,47 +16,33 @@
 
     canvas {
       background:black;
-      box-shadow:0 0 20px cyan;
+      box-shadow:0 0 15px cyan;
+      margin:5px;
     }
 
-    #panel { margin-left:20px; }
-
-    #overlay {
+    #overlay, #startScreen {
       position:fixed;
       width:100%;
       height:100%;
       background:rgba(0,0,0,0.9);
-      display:none;
+      display:flex;
       justify-content:center;
       align-items:center;
       flex-direction:column;
-      font-size:30px;
     }
 
-    button {
-      margin-top:10px;
-      padding:10px;
-      font-size:16px;
-    }
+    #overlay { display:none; }
   </style>
 </head>
 
 <body>
 
 <canvas id="game" width="200" height="400"></canvas>
+<canvas id="opponent" width="120" height="200"></canvas>
 
-<div id="panel">
-  <h2>Score: <span id="score">0</span></h2>
-  <h3>Level: <span id="level">1</span></h3>
-
-  <h3>Next</h3>
-  <canvas id="next" width="100" height="100"></canvas>
-
-  <h3>Hold</h3>
-  <canvas id="hold" width="100" height="100"></canvas>
-
-  <button onclick="toggleMute()">🔊 Mute</button>
-  <input type="range" min="0" max="1" step="0.1" value="0.5" onchange="setVolume(this.value)">
+<div id="startScreen">
+  <button onclick="readyUp()">READY</button>
+  <div id="countdown"></div>
 </div>
 
 <div id="overlay">
@@ -64,262 +50,195 @@
   <button onclick="location.reload()">Restart</button>
 </div>
 
-<!-- AUDIO -->
-<audio id="bgm" src="bg.mp3" loop></audio>
-<audio id="move" src="move.wav"></audio>
-<audio id="rotate" src="rotate.wav"></audio>
-<audio id="clear" src="clear.wav"></audio>
-<audio id="drop" src="drop.wav"></audio>
-<audio id="gameover" src="gameover.wav"></audio>
-
 <script>
-// 🔊 SOUND SYSTEM
-let muted = false;
-let volume = 0.5;
-
-function playSound(id){
- if(muted) return;
- let s = document.getElementById(id);
- s.currentTime = 0;
- s.volume = volume;
- s.play().catch(()=>{});
-}
-
-function setVolume(v){
- volume = v;
- document.getElementById("bgm").volume = v;
-}
-
-function toggleMute(){
- muted = !muted;
- document.getElementById("bgm").muted = muted;
-}
-
-// 🔓 UNLOCK AUDIO
-document.body.addEventListener("click", ()=>{
- document.getElementById("bgm").play().catch(()=>{});
-}, { once:true });
-
-// GAME SETUP
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
-const nextCtx = document.getElementById("next").getContext("2d");
-const holdCtx = document.getElementById("hold").getContext("2d");
+const oppCtx = document.getElementById("opponent").getContext("2d");
 
 const ROWS=20, COLS=10, SIZE=20;
 
-let board, piece, nextPiece, holdPiece=null;
-let canHold=true;
-let score, level, speed, gameOver;
+let board, piece, nextPiece;
+let gameStarted=false, gameOver=false;
 
-// SHAPES
-const pieces=[
- {shape:[[1,1,1,1]],color:"cyan"},
- {shape:[[1,1],[1,1]],color:"yellow"},
- {shape:[[0,1,0],[1,1,1]],color:"purple"},
- {shape:[[0,1,1],[1,1,0]],color:"green"},
- {shape:[[1,1,0],[0,1,1]],color:"red"},
- {shape:[[1,0,0],[1,1,1]],color:"blue"},
- {shape:[[0,0,1],[1,1,1]],color:"orange"}
-];
+// 🌐 CONNECT
+let socket = new WebSocket("wss://your-app-name.onrender.com");
 
-function createPiece(p){
- return {shape:p.shape.map(r=>[...r]),color:p.color,x:3,y:0};
+socket.onmessage = (e)=>{
+ let data = JSON.parse(e.data);
+
+ if(data.type==="state") drawOpponent(data.board);
+ if(data.type==="attack") addGarbage(data.lines);
+ if(data.type==="start") startCountdown();
+};
+
+function readyUp(){
+ socket.send(JSON.stringify({type:"ready"}));
+ document.getElementById("countdown").innerText="Waiting...";
 }
 
-function randomPiece(){
- return createPiece(pieces[Math.floor(Math.random()*pieces.length)]);
+// ⏳ COUNTDOWN
+function startCountdown(){
+ let c=3;
+ let t=setInterval(()=>{
+  document.getElementById("countdown").innerText=c;
+  c--;
+  if(c<0){
+    clearInterval(t);
+    document.getElementById("startScreen").style.display="none";
+    startGame();
+  }
+ },1000);
 }
 
-function init(){
- board=Array.from({length:ROWS},()=>Array(COLS).fill(0));
- score=0; level=1; speed=500; gameOver=false;
- piece=randomPiece(); nextPiece=randomPiece();
-
- document.getElementById("bgm").volume = volume;
-
- updateUI();
+// 🎮 GAME START
+function startGame(){
+ gameStarted=true;
+ init();
  gameLoop();
 }
 
-function drawCell(ctx,x,y,color,size){
- ctx.fillStyle=color;
- ctx.fillRect(x*size,y*size,size,size);
- ctx.strokeStyle="#111";
- ctx.strokeRect(x*size,y*size,size,size);
+// 🎯 BASIC ENGINE (clean version)
+const pieces=[
+ [[1,1,1,1]],
+ [[1,1],[1,1]],
+ [[0,1,0],[1,1,1]],
+ [[0,1,1],[1,1,0]],
+ [[1,1,0],[0,1,1]]
+];
+
+function init(){
+ board = Array.from({length:ROWS},()=>Array(COLS).fill(0));
+ piece = randomPiece();
+ nextPiece = randomPiece();
 }
 
-// 👁️ GHOST
-function drawGhost(){
- let y = piece.y;
- while(!checkCollision(piece.x,y,piece.shape)) y++;
- y--;
+function randomPiece(){
+ return {
+  shape: pieces[Math.floor(Math.random()*pieces.length)],
+  x:3,y:0,color:"cyan"
+ };
+}
 
- piece.shape.forEach((r,dy)=>r.forEach((v,dx)=>{
-  if(v){
-    ctx.globalAlpha=0.3;
-    drawCell(ctx,piece.x+dx,y+dy,piece.color,SIZE);
-    ctx.globalAlpha=1;
-  }
- }));
+function drawCell(ctx,x,y,size){
+ ctx.fillStyle="cyan";
+ ctx.fillRect(x*size,y*size,size,size);
 }
 
 function draw(){
  ctx.clearRect(0,0,canvas.width,canvas.height);
- drawGhost();
 
- board.forEach((r,y)=>r.forEach((v,x)=>v&&drawCell(ctx,x,y,v,SIZE)));
- piece.shape.forEach((r,y)=>r.forEach((v,x)=>v&&drawCell(ctx,piece.x+x,piece.y+y,piece.color,SIZE)));
+ board.forEach((r,y)=>r.forEach((v,x)=>v&&drawCell(ctx,x,y,SIZE)));
 
- drawMini(nextCtx,nextPiece);
- drawMini(holdCtx,holdPiece);
+ piece.shape.forEach((r,y)=>
+  r.forEach((v,x)=>v&&drawCell(ctx,piece.x+x,piece.y+y,SIZE))
+ );
 }
 
-function drawMini(ctx,p){
- ctx.clearRect(0,0,100,100);
- if(!p) return;
- p.shape.forEach((r,y)=>r.forEach((v,x)=>v&&drawCell(ctx,x,y,p.color,20)));
-}
-
-function checkCollision(px,py,shape){
- for(let y=0;y<shape.length;y++){
-  for(let x=0;x<shape[y].length;x++){
-   if(!shape[y][x]) continue;
-
-   let nx=px+x, ny=py+y;
-
-   if(nx<0||nx>=COLS) return true;
-   if(ny>=ROWS) return true;
-   if(ny>=0&&board[ny][nx]) return true;
-  }
- }
- return false;
-}
-
-function collision(){ return checkCollision(piece.x,piece.y,piece.shape); }
-
-function merge(){
- piece.shape.forEach((r,y)=>r.forEach((v,x)=>{
-  if(v){
-   if(piece.y+y<0) endGame();
-   board[piece.y+y][piece.x+x]=piece.color;
-  }
+function drawOpponent(b){
+ oppCtx.clearRect(0,0,120,200);
+ b.forEach((r,y)=>r.forEach((v,x)=>{
+   if(v){
+     oppCtx.fillStyle="red";
+     oppCtx.fillRect(x*10,y*10,10,10);
+   }
  }));
 }
 
-function clearLines(){
- let lines=0;
-
- board=board.filter(r=>{
-  if(r.every(c=>c!==0)){lines++;return false;}
-  return true;
- });
-
- while(board.length<ROWS) board.unshift(Array(COLS).fill(0));
-
- if(lines>0){
-  playSound("clear");
-  score+=lines*10;
-  level=Math.floor(score/50)+1;
-  speed=Math.max(100,500-(level*40));
-  updateUI();
- }
+// COLLISION
+function collision(px=piece.x,py=piece.y){
+ return piece.shape.some((r,y)=>
+  r.some((v,x)=>{
+    if(!v) return false;
+    let nx=px+x, ny=py+y;
+    if(nx<0||nx>=COLS||ny>=ROWS) return true;
+    if(ny>=0&&board[ny][nx]) return true;
+  })
+ );
 }
 
-function updateUI(){
- document.getElementById("score").innerText=score;
- document.getElementById("level").innerText=level;
-}
-
-function spawnNext(){
- piece=nextPiece;
- piece.x=3; piece.y=0;
- nextPiece=randomPiece();
- canHold=true;
-
- if(collision()) endGame();
-}
-
+// GAME ACTIONS
 function moveDown(){
- if(gameOver) return;
-
  piece.y++;
  if(collision()){
   piece.y--;
   merge();
   clearLines();
-  spawnNext();
+  piece=nextPiece;
+  nextPiece=randomPiece();
+  if(collision()) endGame();
  }
 }
 
 function move(d){
  piece.x+=d;
  if(collision()) piece.x-=d;
- else playSound("move");
 }
 
 function rotate(){
- let r=piece.shape[0].map((_,i)=>piece.shape.map(row=>row[i]).reverse());
- let old=piece.shape;
+ let s=piece.shape;
+ let r=s[0].map((_,i)=>s.map(row=>row[i]).reverse());
+ let old=s;
  piece.shape=r;
  if(collision()) piece.shape=old;
- else playSound("rotate");
 }
 
-function hold(){
- if(!canHold) return;
+function merge(){
+ piece.shape.forEach((r,y)=>r.forEach((v,x)=>{
+  if(v) board[piece.y+y][piece.x+x]=1;
+ }));
+}
 
- if(!holdPiece){
-  holdPiece=createPiece(piece);
-  spawnNext();
- } else {
-  let t=createPiece(piece);
-  piece=createPiece(holdPiece);
-  holdPiece=t;
+function clearLines(){
+ let lines=0;
+ board=board.filter(r=>{
+  if(r.every(c=>c)){lines++;return false;}
+  return true;
+ });
+ while(board.length<ROWS) board.unshift(Array(COLS).fill(0));
+
+ if(lines>0) sendAttack(lines);
+}
+
+function addGarbage(lines){
+ for(let i=0;i<lines;i++){
+  board.shift();
+  let row=Array(COLS).fill(1);
+  row[Math.floor(Math.random()*COLS)]=0;
+  board.push(row);
  }
-
- canHold=false;
 }
 
-function hardDrop(){
- while(!collision()) piece.y++;
- piece.y--;
+function sendState(){
+ socket.send(JSON.stringify({type:"state",board}));
+}
 
- playSound("drop");
-
- merge();
- clearLines();
- spawnNext();
+function sendAttack(lines){
+ socket.send(JSON.stringify({type:"attack",lines}));
 }
 
 function endGame(){
  gameOver=true;
- playSound("gameover");
  document.getElementById("overlay").style.display="flex";
 }
 
+// LOOP
+function gameLoop(){
+ if(gameOver||!gameStarted) return;
+
+ moveDown();
+ draw();
+ sendState();
+
+ setTimeout(gameLoop,400);
+}
+
+// CONTROLS
 window.addEventListener("keydown",e=>{
- if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"," "].includes(e.key)) e.preventDefault();
-
- if(gameOver) return;
-
  if(e.key==="ArrowLeft") move(-1);
  if(e.key==="ArrowRight") move(1);
  if(e.key==="ArrowDown") moveDown();
  if(e.key==="ArrowUp") rotate();
- if(e.key==="c"||e.key==="C") hold();
- if(e.code==="Space") hardDrop();
 });
-
-function gameLoop(){
- if(gameOver) return;
-
- moveDown();
- draw();
- setTimeout(gameLoop,speed);
-}
-
-init();
 </script>
 
 </body>
