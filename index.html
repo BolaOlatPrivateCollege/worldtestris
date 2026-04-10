@@ -1,25 +1,58 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Tetris Pro Ultimate</title>
+  <title>Tetris Mobile Pro FINAL</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+
   <style>
     body {
       margin:0;
       background:#020617;
-      display:flex;
-      justify-content:center;
-      align-items:center;
-      height:100vh;
       color:white;
       font-family:Arial;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
     }
 
     canvas {
       background:black;
-      box-shadow:0 0 20px cyan;
+      box-shadow:0 0 15px cyan;
     }
 
-    #panel { margin-left:20px; width:200px; }
+    #game {
+      width:90vw;
+      max-width:300px;
+      height:auto;
+    }
+
+    #panel {
+      text-align:center;
+      margin-top:10px;
+    }
+
+    #panel canvas {
+      width:80px;
+      height:80px;
+    }
+
+    #controls {
+      margin-top:15px;
+      display:grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap:10px;
+      width:90vw;
+      max-width:320px;
+    }
+
+    #controls button {
+      padding:15px;
+      font-size:20px;
+      border:none;
+      border-radius:10px;
+      background:#0ff;
+      color:black;
+    }
 
     #overlay {
       position:fixed;
@@ -30,26 +63,6 @@
       justify-content:center;
       align-items:center;
       flex-direction:column;
-      font-size:24px;
-    }
-
-    input {
-      padding:10px;
-      margin-top:10px;
-      font-size:16px;
-    }
-
-    button {
-      margin-top:10px;
-      padding:10px;
-      font-size:16px;
-    }
-
-    #leaderboard {
-      margin-top:20px;
-      background:#111;
-      padding:10px;
-      border-radius:10px;
     }
   </style>
 </head>
@@ -59,28 +72,67 @@
 <canvas id="game" width="200" height="400"></canvas>
 
 <div id="panel">
-  <h2>Score: <span id="score">0</span></h2>
-  <h3>Level: <span id="level">1</span></h3>
+  <h3>Score: <span id="score">0</span></h3>
+  <h4>Level: <span id="level">1</span></h4>
 
-  <h3>Next</h3>
   <canvas id="next" width="100" height="100"></canvas>
-
-  <h3>Hold</h3>
   <canvas id="hold" width="100" height="100"></canvas>
 
-  <div id="leaderboard">
-    <h3>🏆 Top Scores</h3>
-    <ol id="scores"></ol>
-  </div>
+  <button onclick="toggleMute()">🔊</button>
+  <input type="range" min="0" max="1" step="0.1" value="0.5" onchange="setVolume(this.value)">
+</div>
+
+<div id="controls">
+  <button onclick="move(-1)">⬅️</button>
+  <button onclick="rotate()">🔄</button>
+  <button onclick="move(1)">➡️</button>
+  <button onclick="moveDown()">⬇️</button>
+  <button onclick="hardDrop()">⚡</button>
+  <button onclick="hold()">🧊</button>
 </div>
 
 <div id="overlay">
-  <div>GAME OVER</div>
-  <input id="playerName" placeholder="Enter your name"/>
-  <button onclick="saveScore()">Save Score</button>
+  <h2>GAME OVER</h2>
+  <button onclick="location.reload()">Restart</button>
 </div>
 
+<!-- AUDIO -->
+<audio id="bgm" src="bg.mp3" loop></audio>
+<audio id="moveSound" src="move.wav"></audio>
+<audio id="rotateSound" src="rotate.wav"></audio>
+<audio id="clearSound" src="clear.wav"></audio>
+<audio id="dropSound" src="drop.wav"></audio>
+<audio id="gameOverSound" src="gameover.wav"></audio>
+
 <script>
+// 🔊 SOUND SYSTEM
+let muted = false;
+let volume = 0.5;
+
+function playSound(id){
+  if(muted) return;
+  let s = document.getElementById(id);
+  s.currentTime = 0;
+  s.volume = volume;
+  s.play().catch(()=>{});
+}
+
+function setVolume(v){
+  volume = v;
+  document.getElementById("bgm").volume = v;
+}
+
+function toggleMute(){
+  muted = !muted;
+  document.getElementById("bgm").muted = muted;
+}
+
+// 🔓 AUDIO UNLOCK (IMPORTANT)
+document.body.addEventListener("click", () => {
+  document.getElementById("bgm").play().catch(()=>{});
+}, { once:true });
+
+// GAME SETUP
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 const nextCtx = document.getElementById("next").getContext("2d");
@@ -92,7 +144,6 @@ let board, piece, nextPiece, holdPiece=null;
 let canHold=true;
 let score, level, speed, gameOver;
 
-// 🎯 SHAPES
 const pieces=[
  {shape:[[1,1,1,1]],color:"cyan"},
  {shape:[[1,1],[1,1]],color:"yellow"},
@@ -116,8 +167,9 @@ function init(){
  score=0; level=1; speed=500; gameOver=false;
  piece=randomPiece(); nextPiece=randomPiece();
 
+ document.getElementById("bgm").volume = volume;
+
  updateUI();
- loadScores();
  gameLoop();
 }
 
@@ -128,8 +180,25 @@ function drawCell(ctx,x,y,color,size){
  ctx.strokeRect(x*size,y*size,size,size);
 }
 
+// 👁️ GHOST
+function drawGhost(){
+ let y=piece.y;
+ while(!checkCollision(piece.x,y,piece.shape)) y++;
+ y--;
+
+ piece.shape.forEach((r,dy)=>r.forEach((v,dx)=>{
+  if(v){
+    ctx.globalAlpha=0.3;
+    drawCell(ctx,piece.x+dx,y+dy,piece.color,SIZE);
+    ctx.globalAlpha=1;
+  }
+ }));
+}
+
 function draw(){
  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+ drawGhost();
 
  board.forEach((r,y)=>r.forEach((v,x)=>v&&drawCell(ctx,x,y,v,SIZE)));
  piece.shape.forEach((r,y)=>r.forEach((v,x)=>v&&drawCell(ctx,piece.x+x,piece.y+y,piece.color,SIZE)));
@@ -148,6 +217,7 @@ function checkCollision(px,py,shape){
  for(let y=0;y<shape.length;y++){
   for(let x=0;x<shape[y].length;x++){
    if(!shape[y][x]) continue;
+
    let nx=px+x, ny=py+y;
 
    if(nx<0||nx>=COLS) return true;
@@ -171,13 +241,16 @@ function merge(){
 
 function clearLines(){
  let lines=0;
+
  board=board.filter(r=>{
   if(r.every(c=>c!==0)){lines++;return false;}
   return true;
  });
+
  while(board.length<ROWS) board.unshift(Array(COLS).fill(0));
 
  if(lines>0){
+  playSound("clearSound");
   score+=lines*10;
   level=Math.floor(score/50)+1;
   speed=Math.max(100,500-(level*40));
@@ -214,6 +287,7 @@ function moveDown(){
 function move(d){
  piece.x+=d;
  if(collision()) piece.x-=d;
+ else playSound("moveSound");
 }
 
 function rotate(){
@@ -221,6 +295,7 @@ function rotate(){
  let old=piece.shape;
  piece.shape=r;
  if(collision()) piece.shape=old;
+ else playSound("rotateSound");
 }
 
 function hold(){
@@ -238,39 +313,26 @@ function hold(){
  canHold=false;
 }
 
+function hardDrop(){
+ while(!collision()) piece.y++;
+ piece.y--;
+
+ playSound("dropSound");
+
+ merge();
+ clearLines();
+ spawnNext();
+}
+
 function endGame(){
  gameOver=true;
+ playSound("gameOverSound");
  document.getElementById("overlay").style.display="flex";
 }
 
-// 🏆 LEADERBOARD
-function saveScore(){
- let name=document.getElementById("playerName").value || "Player";
- let scores=JSON.parse(localStorage.getItem("tetrisScores"))||[];
-
- scores.push({name,score});
- scores.sort((a,b)=>b.score-a.score);
- scores=scores.slice(0,5);
-
- localStorage.setItem("tetrisScores",JSON.stringify(scores));
-
- location.reload();
-}
-
-function loadScores(){
- let scores=JSON.parse(localStorage.getItem("tetrisScores"))||[];
- let list=document.getElementById("scores");
- list.innerHTML="";
-
- scores.forEach(s=>{
-  let li=document.createElement("li");
-  li.innerText=`${s.name} - ${s.score}`;
-  list.appendChild(li);
- });
-}
-
+// 🎮 KEYBOARD
 window.addEventListener("keydown",e=>{
- if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].includes(e.key)) e.preventDefault();
+ if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"," "].includes(e.key)) e.preventDefault();
 
  if(gameOver) return;
 
@@ -279,6 +341,7 @@ window.addEventListener("keydown",e=>{
  if(e.key==="ArrowDown") moveDown();
  if(e.key==="ArrowUp") rotate();
  if(e.key==="c"||e.key==="C") hold();
+ if(e.code==="Space") hardDrop();
 });
 
 function gameLoop(){
@@ -286,7 +349,6 @@ function gameLoop(){
 
  moveDown();
  draw();
-
  setTimeout(gameLoop,speed);
 }
 
