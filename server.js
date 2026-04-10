@@ -6,11 +6,26 @@ const server = http.createServer();
 const wss = new WebSocket.Server({ server });
 
 let players = [];
+let readyCount = 0;
 
 wss.on("connection", (ws) => {
   players.push(ws);
 
   ws.on("message", (msg) => {
+    let data = JSON.parse(msg);
+
+    if (data.type === "ready") {
+      readyCount++;
+
+      if (readyCount >= 2) {
+        players.forEach(p => {
+          p.send(JSON.stringify({ type: "start" }));
+        });
+        readyCount = 0;
+      }
+      return;
+    }
+
     players.forEach(p => {
       if (p !== ws && p.readyState === WebSocket.OPEN) {
         p.send(msg);
