@@ -106,7 +106,7 @@ let board, piece, score, level, speed;
 let gameOver = false;
 let gameStarted = false;
 
-// 🎯 7 SHAPES
+// 7 SHAPES
 const pieces = [
  {shape:[[1,1,1,1]],color:"cyan"},
  {shape:[[1,1],[1,1]],color:"yellow"},
@@ -127,9 +127,15 @@ function init(){
  updateUI();
 }
 
+// ✅ FIXED SPAWN POSITION
 function randomPiece(){
  let p = pieces[Math.floor(Math.random()*pieces.length)];
- return {shape:p.shape,color:p.color,x:3,y:0};
+ return {
+  shape:p.shape,
+  color:p.color,
+  x: Math.floor((COLS - p.shape[0].length)/2),
+  y: 0
+ };
 }
 
 function drawCell(x,y,color){
@@ -155,7 +161,7 @@ function draw(){
  });
 }
 
-// ✅ COLLISION FIX
+// ✅ FIXED COLLISION
 function collision(){
  return piece.shape.some((row,y)=>
   row.some((val,x)=>{
@@ -164,7 +170,8 @@ function collision(){
     let newX = piece.x + x;
     let newY = piece.y + y;
 
-    if(newX < 0 || newX >= COLS) return true;
+    if(newX < 0) return true;
+    if(newX >= COLS) return true;
     if(newY >= ROWS) return true;
     if(newY >= 0 && board[newY][newX]) return true;
 
@@ -181,7 +188,6 @@ function merge(){
       board[piece.y+y][piece.x+x] = piece.color;
     }
   });
- });
 }
 
 function clearLines(){
@@ -230,8 +236,12 @@ function moveDown(){
 
 function move(dir){
  piece.x += dir;
- if(collision()) piece.x -= dir;
- else playSound("moveSound");
+
+ if(collision()){
+  piece.x -= dir;
+ } else {
+  playSound("moveSound");
+ }
 }
 
 function rotate(){
@@ -264,14 +274,12 @@ function endGame(){
  playSound("gameOverSound");
 }
 
-// 🔊 SOUND FIX
 function playSound(id){
  let s = document.getElementById(id);
  s.currentTime = 0;
  s.play().catch(()=>{});
 }
 
-// 🎮 CONTROLS
 window.addEventListener("keydown",e=>{
  if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].includes(e.key)){
   e.preventDefault();
@@ -283,14 +291,11 @@ window.addEventListener("keydown",e=>{
  if(e.key==="ArrowUp") rotate();
 });
 
-// ▶ START GAME
 function startGame(){
  gameStarted = true;
  document.getElementById("startScreen").style.display="none";
 
- let bgm = document.getElementById("bgm");
- bgm.play().catch(()=>{});
-
+ document.getElementById("bgm").play().catch(()=>{});
  gameLoop();
 }
 
