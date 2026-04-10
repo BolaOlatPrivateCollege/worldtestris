@@ -17,16 +17,11 @@
     canvas {
       background: black;
       box-shadow: 0 0 20px cyan;
+      margin: 5px;
     }
 
     #panel {
       margin-left: 20px;
-    }
-
-    button {
-      margin: 5px;
-      padding: 8px;
-      cursor: pointer;
     }
 
     #controls {
@@ -45,6 +40,28 @@
       color: black;
       box-shadow: 0 0 10px #0ff;
     }
+
+    #overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0,0,0,0.85);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      font-size: 30px;
+    }
+
+    #overlay button {
+      margin-top: 20px;
+      padding: 12px 20px;
+      background: cyan;
+      border: none;
+      font-size: 18px;
+    }
   </style>
 </head>
 
@@ -57,7 +74,6 @@
   <h2>Score: <span id="score">0</span></h2>
   <h3>High: <span id="high">0</span></h3>
   <h3>Level: <span id="level">1</span></h3>
-  <h3 id="status"></h3>
 
   <button onclick="setTheme('neon')">Neon</button>
   <button onclick="setTheme('retro')">Retro</button>
@@ -71,6 +87,12 @@
   <button onclick="moveDown()">⬇️</button>
 </div>
 
+<div id="overlay">
+  <div>GAME OVER</div>
+  <div id="finalScore"></div>
+  <button onclick="restartGame()">Restart</button>
+</div>
+
 <script>
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
@@ -82,14 +104,7 @@ const ROWS = 20;
 const COLS = 12;
 const SIZE = 20;
 
-let board = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
-let score = 0;
-let high = localStorage.getItem("tetrisHigh") || 0;
-let level = 1;
-let speed = 500;
-let gameOver = false;
-
-document.getElementById("high").innerText = high;
+let board, piece, score, high, level, speed, gameOver;
 
 const themes = {
   neon: ["#0ff","#f0f","#ff0","#0f0","#f00","#00f","#fa0"],
@@ -97,13 +112,7 @@ const themes = {
   dark: ["#888","#aaa","#ccc","#666","#999","#bbb","#777"]
 };
 
-let currentTheme = "neon";
-let colors = themes[currentTheme];
-
-function setTheme(name){
-  currentTheme = name;
-  colors = themes[name];
-}
+let colors = themes["neon"];
 
 const pieces = [
   [[1,1,1,1]],
@@ -115,6 +124,25 @@ const pieces = [
   [[0,0,1],[1,1,1]]
 ];
 
+function init(){
+  board = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+  score = 0;
+  high = localStorage.getItem("tetrisHigh") || 0;
+  level = 1;
+  speed = 500;
+  gameOver = false;
+  piece = randomPiece();
+
+  document.getElementById("overlay").style.display = "none";
+  updateUI();
+
+  gameLoop();
+}
+
+function setTheme(name){
+  colors = themes[name];
+}
+
 function randomPiece(){
   let i = Math.floor(Math.random()*pieces.length);
   return {
@@ -125,10 +153,8 @@ function randomPiece(){
   };
 }
 
-let piece = randomPiece();
-
 function drawCell(ctx,x,y,color,size){
-  ctx.fillStyle = color;
+  ctx.fillStyle=color;
   ctx.fillRect(x*size,y*size,size,size);
   ctx.strokeStyle="#111";
   ctx.strokeRect(x*size,y*size,size,size);
@@ -152,9 +178,12 @@ function draw(){
 
 function drawOpponent(data){
   oppCtx.clearRect(0,0,oppCanvas.width,oppCanvas.height);
+
   data.board.forEach((row,y)=>{
     row.forEach((val,x)=>{
-      if(val) drawCell(oppCtx,x,y,val,10);
+      if(val){
+        drawCell(oppCtx,x,y,val,10);
+      }
     });
   });
 }
@@ -173,9 +202,8 @@ function merge(){
   piece.shape.forEach((row,y)=>{
     row.forEach((val,x)=>{
       if(val){
-        if(!board[piece.y+y]){
-          gameOver=true;
-          document.getElementById("status").innerText="GAME OVER";
+        if(piece.y+y<0){
+          endGame();
           return;
         }
         board[piece.y+y][piece.x+x]=piece.color;
@@ -199,9 +227,7 @@ function clearLines(){
     board.unshift(Array(COLS).fill(0));
   }
 
-  if(lines>0){
-    updateScore(lines*10);
-  }
+  if(lines>0) updateScore(lines*10);
 }
 
 function updateScore(points){
@@ -210,16 +236,17 @@ function updateScore(points){
   if(score>high){
     high=score;
     localStorage.setItem("tetrisHigh",high);
-    document.getElementById("high").innerText=high;
   }
 
-  document.getElementById("score").innerText=score;
-  updateLevel();
-}
-
-function updateLevel(){
   level = Math.floor(score/50)+1;
   speed = Math.max(100,500-(level*40));
+
+  updateUI();
+}
+
+function updateUI(){
+  document.getElementById("score").innerText=score;
+  document.getElementById("high").innerText=high;
   document.getElementById("level").innerText=level;
 }
 
@@ -227,11 +254,16 @@ function moveDown(){
   if(gameOver) return;
 
   piece.y++;
+
   if(collision()){
     piece.y--;
     merge();
     clearLines();
     piece=randomPiece();
+
+    if(collision()){
+      endGame();
+    }
   }
 }
 
@@ -249,9 +281,17 @@ function rotate(){
   if(collision()) piece.shape=old;
 }
 
-// ✅ FIXED KEY CONTROLS
-window.addEventListener("keydown", function(e){
+function endGame(){
+  gameOver=true;
+  document.getElementById("overlay").style.display="flex";
+  document.getElementById("finalScore").innerText="Score: "+score;
+}
 
+function restartGame(){
+  init();
+}
+
+window.addEventListener("keydown",function(e){
   if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].includes(e.key)){
     e.preventDefault();
   }
@@ -264,7 +304,7 @@ window.addEventListener("keydown", function(e){
   if(e.key==="ArrowUp") rotate();
 });
 
-// Multiplayer (safe if offline)
+// 🌐 MULTIPLAYER
 let socket;
 try {
   socket = new WebSocket("wss://tetris-server-fowt.onrender.com");
@@ -282,14 +322,16 @@ function sendState(){
 }
 
 function gameLoop(){
+  if(gameOver) return;
+
   moveDown();
   draw();
   sendState();
-  if(!gameOver) setTimeout(gameLoop,speed);
+
+  setTimeout(gameLoop,speed);
 }
 
-window.focus();
-gameLoop();
+init();
 </script>
 
 </body>
