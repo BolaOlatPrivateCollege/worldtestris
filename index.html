@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Tetris Perfect Fit</title>
+  <title>Tetris Final Start</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 
   <style>
@@ -19,7 +19,7 @@
 
     #container {
       display:flex;
-      gap:12px; /* 🔥 more spacing */
+      gap:12px;
       align-items:center;
     }
 
@@ -43,8 +43,7 @@
     #controls {
       display:grid;
       grid-template-columns: repeat(2, 1fr);
-      gap:10px; /* 🔥 more spacing */
-      margin-top:10px;
+      gap:10px;
     }
 
     #controls button {
@@ -56,20 +55,39 @@
       color:black;
     }
 
-    #overlay {
+    #startScreen, #overlay {
       position:fixed;
       width:100%;
       height:100%;
-      background:rgba(0,0,0,0.9);
-      display:none;
+      background:rgba(0,0,0,0.95);
+      display:flex;
       justify-content:center;
       align-items:center;
       flex-direction:column;
+      z-index:10;
+    }
+
+    #overlay { display:none; }
+
+    button.start {
+      padding:15px 30px;
+      font-size:20px;
+      border:none;
+      border-radius:10px;
+      background:#0ff;
+      color:black;
     }
   </style>
 </head>
 
 <body>
+
+<!-- START SCREEN -->
+<div id="startScreen">
+  <h1>TETRIS</h1>
+  <button class="start" onclick="startGame()">START GAME</button>
+  <div id="countdown"></div>
+</div>
 
 <div id="container">
 
@@ -120,11 +138,7 @@ function playSound(id){
  s.play().catch(()=>{});
 }
 
-document.body.addEventListener("click",()=>{
- document.getElementById("bgm").play().catch(()=>{});
-},{once:true});
-
-// 📱 PERFECT FIT (NO CUTTING)
+// 📱 SCALE
 const canvas=document.getElementById("game");
 const ctx=canvas.getContext("2d");
 
@@ -132,25 +146,24 @@ const ROWS=20, COLS=10;
 let SIZE;
 
 function resize(){
- const maxHeight = window.innerHeight * 0.9;
- const maxWidth = window.innerWidth * 0.5;
-
- SIZE = Math.floor(Math.min(maxHeight / ROWS, maxWidth / COLS));
-
- canvas.width = COLS * SIZE;
- canvas.height = ROWS * SIZE;
+ const maxHeight=window.innerHeight*0.9;
+ const maxWidth=window.innerWidth*0.5;
+ SIZE=Math.floor(Math.min(maxHeight/ROWS,maxWidth/COLS));
+ canvas.width=COLS*SIZE;
+ canvas.height=ROWS*SIZE;
 }
-
 resize();
 window.addEventListener("resize",resize);
 
 const nextCtx=document.getElementById("next").getContext("2d");
 const holdCtx=document.getElementById("hold").getContext("2d");
 
-// GAME
+// GAME STATE
 let board,piece,nextPiece,holdPiece=null,canHold=true;
 let score,level,speed,gameOver;
+let gameStarted=false;
 
+// SHAPES
 const pieces=[
  {shape:[[1,1,1,1]],color:"cyan"},
  {shape:[[1,1],[1,1]],color:"yellow"},
@@ -172,14 +185,28 @@ function randomPiece(){
 function init(){
  board=Array.from({length:ROWS},()=>Array(COLS).fill(0));
  score=0;level=1;speed=500;gameOver=false;
-
  piece=randomPiece();
  nextPiece=randomPiece();
-
- document.getElementById("bgm").volume=volume;
-
  updateUI();
- gameLoop();
+}
+
+function startGame(){
+ document.getElementById("bgm").play().catch(()=>{});
+
+ let c=3;
+ let el=document.getElementById("countdown");
+
+ let t=setInterval(()=>{
+  el.innerText=c;
+  c--;
+
+  if(c<0){
+   clearInterval(t);
+   document.getElementById("startScreen").style.display="none";
+   gameStarted=true;
+   gameLoop();
+  }
+ },1000);
 }
 
 function drawCell(x,y,color){
@@ -202,7 +229,6 @@ function draw(){
 function drawMini(ctx,p){
  ctx.clearRect(0,0,100,100);
  if(!p) return;
-
  p.shape.forEach((r,y)=>r.forEach((v,x)=>{
   if(v){
    ctx.fillStyle=p.color;
@@ -215,9 +241,7 @@ function checkCollision(px,py,shape){
  for(let y=0;y<shape.length;y++){
   for(let x=0;x<shape[y].length;x++){
    if(!shape[y][x]) continue;
-
    let nx=px+x, ny=py+y;
-
    if(nx<0||nx>=COLS) return true;
    if(ny>=ROWS) return true;
    if(ny>=0&&board[ny][nx]) return true;
@@ -243,7 +267,6 @@ function clearLines(){
   if(r.every(c=>c!==0)){lines++;return false;}
   return true;
  });
-
  while(board.length<ROWS) board.unshift(Array(COLS).fill(0));
 
  if(lines>0){
@@ -269,6 +292,8 @@ function spawnNext(){
 }
 
 function moveDown(){
+ if(!gameStarted) return;
+
  piece.y++;
  if(collision()){
   piece.y--;
@@ -279,12 +304,16 @@ function moveDown(){
 }
 
 function move(d){
+ if(!gameStarted) return;
+
  piece.x+=d;
  if(collision()) piece.x-=d;
  else playSound("moveSound");
 }
 
 function rotate(){
+ if(!gameStarted) return;
+
  let r=piece.shape[0].map((_,i)=>piece.shape.map(row=>row[i]).reverse());
  let old=piece.shape;
  piece.shape=r;
@@ -293,6 +322,7 @@ function rotate(){
 }
 
 function hold(){
+ if(!gameStarted) return;
  if(!canHold) return;
 
  if(!holdPiece){
@@ -308,6 +338,8 @@ function hold(){
 }
 
 function hardDrop(){
+ if(!gameStarted) return;
+
  while(!collision()) piece.y++;
  piece.y--;
  playSound("dropSound");
@@ -323,7 +355,8 @@ function endGame(){
 }
 
 function gameLoop(){
- if(gameOver) return;
+ if(gameOver || !gameStarted) return;
+
  moveDown();
  draw();
  setTimeout(gameLoop,speed);
