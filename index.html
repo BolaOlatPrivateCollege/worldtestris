@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Tetris Side Controls</title>
+  <title>Tetris Perfect Fit</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 
   <style>
@@ -19,8 +19,8 @@
 
     #container {
       display:flex;
-      gap:10px;
-      align-items:flex-start;
+      gap:12px; /* 🔥 more spacing */
+      align-items:center;
     }
 
     canvas {
@@ -31,26 +31,27 @@
     #side {
       display:flex;
       flex-direction:column;
-      gap:10px;
+      gap:12px;
       font-size:12px;
     }
 
     #side canvas {
-      width:60px;
-      height:60px;
+      width:70px;
+      height:70px;
     }
 
     #controls {
       display:grid;
-      grid-template-columns: 1fr;
-      gap:5px;
+      grid-template-columns: repeat(2, 1fr);
+      gap:10px; /* 🔥 more spacing */
+      margin-top:10px;
     }
 
     #controls button {
-      padding:8px;
-      font-size:14px;
+      padding:12px;
+      font-size:16px;
       border:none;
-      border-radius:6px;
+      border-radius:8px;
       background:#0ff;
       color:black;
     }
@@ -72,12 +73,9 @@
 
 <div id="container">
 
-  <!-- GAME -->
   <canvas id="game"></canvas>
 
-  <!-- SIDE PANEL -->
   <div id="side">
-
     <div>Score: <span id="score">0</span></div>
     <div>Level: <span id="level">1</span></div>
 
@@ -87,16 +85,14 @@
     <div>Hold</div>
     <canvas id="hold" width="100" height="100"></canvas>
 
-    <!-- 🎮 SIDE CONTROLS -->
     <div id="controls">
       <button onclick="move(-1)">⬅️</button>
-      <button onclick="rotate()">🔄</button>
       <button onclick="move(1)">➡️</button>
+      <button onclick="rotate()">🔄</button>
       <button onclick="moveDown()">⬇️</button>
       <button onclick="hardDrop()">⚡</button>
       <button onclick="hold()">🧊</button>
     </div>
-
   </div>
 
 </div>
@@ -116,10 +112,8 @@
 
 <script>
 // 🔊 SOUND
-let muted=false, volume=0.5;
-
+let volume=0.5;
 function playSound(id){
- if(muted) return;
  let s=document.getElementById(id);
  s.currentTime=0;
  s.volume=volume;
@@ -130,7 +124,7 @@ document.body.addEventListener("click",()=>{
  document.getElementById("bgm").play().catch(()=>{});
 },{once:true});
 
-// 📱 SCALE
+// 📱 PERFECT FIT (NO CUTTING)
 const canvas=document.getElementById("game");
 const ctx=canvas.getContext("2d");
 
@@ -138,10 +132,15 @@ const ROWS=20, COLS=10;
 let SIZE;
 
 function resize(){
- SIZE=Math.floor(window.innerHeight*0.045);
- canvas.width=COLS*SIZE;
- canvas.height=ROWS*SIZE;
+ const maxHeight = window.innerHeight * 0.9;
+ const maxWidth = window.innerWidth * 0.5;
+
+ SIZE = Math.floor(Math.min(maxHeight / ROWS, maxWidth / COLS));
+
+ canvas.width = COLS * SIZE;
+ canvas.height = ROWS * SIZE;
 }
+
 resize();
 window.addEventListener("resize",resize);
 
@@ -183,7 +182,7 @@ function init(){
  gameLoop();
 }
 
-function drawCell(ctx,x,y,color){
+function drawCell(x,y,color){
  ctx.fillStyle=color;
  ctx.fillRect(x*SIZE,y*SIZE,SIZE,SIZE);
  ctx.strokeStyle="#111";
@@ -193,8 +192,8 @@ function drawCell(ctx,x,y,color){
 function draw(){
  ctx.clearRect(0,0,canvas.width,canvas.height);
 
- board.forEach((r,y)=>r.forEach((v,x)=>v&&drawCell(ctx,x,y,v)));
- piece.shape.forEach((r,y)=>r.forEach((v,x)=>v&&drawCell(ctx,piece.x+x,piece.y+y,piece.color)));
+ board.forEach((r,y)=>r.forEach((v,x)=>v&&drawCell(x,y,v)));
+ piece.shape.forEach((r,y)=>r.forEach((v,x)=>v&&drawCell(piece.x+x,piece.y+y,piece.color)));
 
  drawMini(nextCtx,nextPiece);
  drawMini(holdCtx,holdPiece);
@@ -216,6 +215,7 @@ function checkCollision(px,py,shape){
  for(let y=0;y<shape.length;y++){
   for(let x=0;x<shape[y].length;x++){
    if(!shape[y][x]) continue;
+
    let nx=px+x, ny=py+y;
 
    if(nx<0||nx>=COLS) return true;
@@ -243,6 +243,7 @@ function clearLines(){
   if(r.every(c=>c!==0)){lines++;return false;}
   return true;
  });
+
  while(board.length<ROWS) board.unshift(Array(COLS).fill(0));
 
  if(lines>0){
