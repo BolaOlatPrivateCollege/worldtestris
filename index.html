@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Tetris Battle X</title>
+  <title>Tetris Battle Pro</title>
   <style>
     body {
       margin:0;
@@ -13,7 +13,13 @@
       color:white;
       font-family:Arial;
     }
-    canvas { background:black; box-shadow:0 0 15px cyan; }
+
+    canvas {
+      background:black;
+      box-shadow:0 0 15px cyan;
+      margin:5px;
+    }
+
     #panel { margin-left:20px; }
 
     #controls {
@@ -30,31 +36,36 @@
       border:none;
     }
 
-    #overlay {
+    #overlay, #startScreen {
       position:fixed;
       width:100%;
       height:100%;
       background:rgba(0,0,0,0.9);
-      display:none;
+      display:flex;
       justify-content:center;
       align-items:center;
       flex-direction:column;
       font-size:30px;
     }
+
+    #overlay { display:none; }
   </style>
 </head>
 
 <body>
 
+<!-- GAME -->
 <canvas id="game" width="240" height="400"></canvas>
 <canvas id="opponent" width="120" height="200"></canvas>
 
+<!-- PANEL -->
 <div id="panel">
   <h2>Score: <span id="score">0</span></h2>
   <h3>Level: <span id="level">1</span></h3>
   <h3 id="status">Connecting...</h3>
 </div>
 
+<!-- CONTROLS -->
 <div id="controls">
   <button onclick="move(-1)">⬅️</button>
   <button onclick="rotate()">🔄</button>
@@ -62,10 +73,24 @@
   <button onclick="moveDown()">⬇️</button>
 </div>
 
+<!-- START SCREEN -->
+<div id="startScreen">
+  <button onclick="readyUp()" style="padding:20px;font-size:20px;">READY</button>
+  <div id="countdown"></div>
+</div>
+
+<!-- GAME OVER -->
 <div id="overlay">
   <div>GAME OVER</div>
   <button onclick="location.reload()">Restart</button>
 </div>
+
+<!-- AUDIO -->
+<audio id="bgm" src="bg.mp3" loop></audio>
+<audio id="moveSound" src="move.wav"></audio>
+<audio id="rotateSound" src="rotate.wav"></audio>
+<audio id="clearSound" src="clear.wav"></audio>
+<audio id="gameOverSound" src="gameover.wav"></audio>
 
 <script>
 const canvas = document.getElementById("game");
@@ -75,8 +100,7 @@ const oppCtx = oppCanvas.getContext("2d");
 
 const ROWS=20, COLS=12, SIZE=20;
 
-let board = Array.from({length:ROWS},()=>Array(COLS).fill(0));
-let score=0, level=1, speed=500, gameOver=false;
+let board, piece, score, level, speed, gameOver, gameStarted=false;
 
 const pieces=[
  [[1,1,1,1]],
@@ -86,12 +110,17 @@ const pieces=[
  [[0,1,1],[1,1,0]]
 ];
 
+function init(){
+ board = Array.from({length:ROWS},()=>Array(COLS).fill(0));
+ score=0; level=1; speed=500; gameOver=false;
+ piece=randomPiece();
+ updateUI();
+}
+
 function randomPiece(){
  let i=Math.floor(Math.random()*pieces.length);
  return {shape:pieces[i],x:4,y:0,color:"cyan"};
 }
-
-let piece=randomPiece();
 
 function drawCell(ctx,x,y,color,size){
  ctx.fillStyle=color;
@@ -100,83 +129,73 @@ function drawCell(ctx,x,y,color,size){
 
 function draw(){
  ctx.clearRect(0,0,canvas.width,canvas.height);
-
  board.forEach((r,y)=>r.forEach((v,x)=>v&&drawCell(ctx,x,y,v,SIZE)));
-
- piece.shape.forEach((r,y)=>
-  r.forEach((v,x)=>v&&drawCell(ctx,piece.x+x,piece.y+y,piece.color,SIZE))
- );
+ piece.shape.forEach((r,y)=>r.forEach((v,x)=>v&&drawCell(ctx,piece.x+x,piece.y+y,piece.color,SIZE)));
 }
 
 function drawOpponent(data){
  oppCtx.clearRect(0,0,oppCanvas.width,oppCanvas.height);
- data.board.forEach((r,y)=>r.forEach((v,x)=>{
-   if(v) drawCell(oppCtx,x,y,"red",10);
- }));
+ data.board.forEach((r,y)=>r.forEach((v,x)=>v&&drawCell(oppCtx,x,y,"red",10)));
 }
 
 function collision(){
- return piece.shape.some((r,y)=>
-  r.some((v,x)=>v&&(board[piece.y+y]&&board[piece.y+y][piece.x+x]))
- );
+ return piece.shape.some((r,y)=>r.some((v,x)=>v&&(board[piece.y+y]&&board[piece.y+y][piece.x+x])));
 }
 
 function merge(){
  piece.shape.forEach((r,y)=>r.forEach((v,x)=>{
-   if(v){
-     if(piece.y+y<0) endGame();
-     board[piece.y+y][piece.x+x]="cyan";
-   }
+  if(v){
+   if(piece.y+y<0) endGame();
+   board[piece.y+y][piece.x+x]="cyan";
+  }
  }));
 }
 
 function addGarbage(lines){
  for(let i=0;i<lines;i++){
-   board.shift();
-   let row=Array(COLS).fill("gray");
-   row[Math.floor(Math.random()*COLS)]=0;
-   board.push(row);
+  board.shift();
+  let row=Array(COLS).fill("gray");
+  row[Math.floor(Math.random()*COLS)]=0;
+  board.push(row);
  }
 }
 
 function clearLines(){
  let lines=0;
- board = board.filter(r=>{
-   if(r.every(c=>c!==0)){ lines++; return false;}
-   return true;
- });
+ board=board.filter(r=>{if(r.every(c=>c!==0)){lines++;return false;}return true;});
  while(board.length<ROWS) board.unshift(Array(COLS).fill(0));
 
  if(lines>0){
-   score+=lines*10;
-
-   // 💣 ATTACK MODE
-   sendAttack(lines);
-
-   level=Math.floor(score/50)+1;
-   speed=Math.max(100,500-(level*40));
-
-   document.getElementById("score").innerText=score;
-   document.getElementById("level").innerText=level;
+  document.getElementById("clearSound").play();
+  score+=lines*10;
+  sendAttack(lines);
+  level=Math.floor(score/50)+1;
+  speed=Math.max(100,500-(level*40));
+  updateUI();
  }
 }
 
+function updateUI(){
+ document.getElementById("score").innerText=score;
+ document.getElementById("level").innerText=level;
+}
+
 function moveDown(){
- if(gameOver) return;
+ if(gameOver||!gameStarted) return;
  piece.y++;
  if(collision()){
-   piece.y--;
-   merge();
-   clearLines();
-   piece=randomPiece();
-
-   if(collision()) endGame();
+  piece.y--;
+  merge();
+  clearLines();
+  piece=randomPiece();
+  if(collision()) endGame();
  }
 }
 
 function move(d){
  piece.x+=d;
  if(collision()) piece.x-=d;
+ else document.getElementById("moveSound").play();
 }
 
 function rotate(){
@@ -185,16 +204,17 @@ function rotate(){
  let old=piece.shape;
  piece.shape=n;
  if(collision()) piece.shape=old;
+ else document.getElementById("rotateSound").play();
 }
 
 function endGame(){
  gameOver=true;
  document.getElementById("overlay").style.display="flex";
+ document.getElementById("gameOverSound").play();
 }
 
 window.addEventListener("keydown",e=>{
  if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].includes(e.key)) e.preventDefault();
- if(gameOver) return;
  if(e.key==="ArrowLeft") move(-1);
  if(e.key==="ArrowRight") move(1);
  if(e.key==="ArrowDown") moveDown();
@@ -204,38 +224,60 @@ window.addEventListener("keydown",e=>{
 // 🌐 MULTIPLAYER
 let socket=new WebSocket("wss://tetris-server-fowt.onrender.com");
 
-socket.onopen=()=>{
- document.getElementById("status").innerText="🟢 Online";
-};
+socket.onopen=()=>document.getElementById("status").innerText="🟢 Online";
 
 socket.onmessage=(e)=>{
  let data=JSON.parse(e.data);
 
  if(data.type==="state") drawOpponent(data);
  if(data.type==="attack") addGarbage(data.lines);
+ if(data.type==="start") startCountdown();
 };
 
 function sendState(){
- if(socket.readyState===1){
-   socket.send(JSON.stringify({type:"state",board}));
- }
+ if(socket.readyState===1) socket.send(JSON.stringify({type:"state",board}));
 }
 
 function sendAttack(lines){
- if(socket.readyState===1){
-   socket.send(JSON.stringify({type:"attack",lines}));
- }
+ if(socket.readyState===1) socket.send(JSON.stringify({type:"attack",lines}));
+}
+
+// READY SYSTEM
+function readyUp(){
+ socket.send(JSON.stringify({type:"ready"}));
+ document.getElementById("countdown").innerText="Waiting...";
+}
+
+function startCountdown(){
+ let c=3;
+ let el=document.getElementById("countdown");
+
+ let t=setInterval(()=>{
+  el.innerText=c;
+  c--;
+  if(c<0){
+   clearInterval(t);
+   document.getElementById("startScreen").style.display="none";
+   startGame();
+  }
+ },1000);
+}
+
+function startGame(){
+ gameStarted=true;
+ document.getElementById("bgm").play();
+ gameLoop();
 }
 
 function gameLoop(){
- if(gameOver) return;
+ if(gameOver||!gameStarted) return;
  moveDown();
  draw();
  sendState();
  setTimeout(gameLoop,speed);
 }
 
-gameLoop();
+init();
 </script>
 </body>
 </html>
