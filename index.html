@@ -46,6 +46,7 @@
       align-items:center;
       flex-direction:column;
       font-size:30px;
+      z-index:10;
     }
 
     #overlay {
@@ -79,7 +80,9 @@
 </div>
 
 <div id="startScreen">
-  <button onclick="startGame()" style="padding:20px;font-size:20px;">START GAME</button>
+  <button onclick="startGame()" style="padding:20px;font-size:20px;">
+    START GAME
+  </button>
 </div>
 
 <div id="overlay">
@@ -106,7 +109,6 @@ let board, piece, score, level, speed;
 let gameOver = false;
 let gameStarted = false;
 
-// 7 SHAPES
 const pieces = [
  {shape:[[1,1,1,1]],color:"cyan"},
  {shape:[[1,1],[1,1]],color:"yellow"},
@@ -127,7 +129,6 @@ function init(){
  updateUI();
 }
 
-// ✅ FIXED SPAWN POSITION
 function randomPiece(){
  let p = pieces[Math.floor(Math.random()*pieces.length)];
  return {
@@ -161,7 +162,6 @@ function draw(){
  });
 }
 
-// ✅ FIXED COLLISION
 function collision(){
  return piece.shape.some((row,y)=>
   row.some((val,x)=>{
@@ -170,8 +170,7 @@ function collision(){
     let newX = piece.x + x;
     let newY = piece.y + y;
 
-    if(newX < 0) return true;
-    if(newX >= COLS) return true;
+    if(newX < 0 || newX >= COLS) return true;
     if(newY >= ROWS) return true;
     if(newY >= 0 && board[newY][newX]) return true;
 
@@ -236,12 +235,8 @@ function moveDown(){
 
 function move(dir){
  piece.x += dir;
-
- if(collision()){
-  piece.x -= dir;
- } else {
-  playSound("moveSound");
- }
+ if(collision()) piece.x -= dir;
+ else playSound("moveSound");
 }
 
 function rotate(){
@@ -280,6 +275,7 @@ function playSound(id){
  s.play().catch(()=>{});
 }
 
+// KEYBOARD
 window.addEventListener("keydown",e=>{
  if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].includes(e.key)){
   e.preventDefault();
@@ -291,11 +287,18 @@ window.addEventListener("keydown",e=>{
  if(e.key==="ArrowUp") rotate();
 });
 
+// ✅ FIXED START FUNCTION
 function startGame(){
- gameStarted = true;
- document.getElementById("startScreen").style.display="none";
+ console.log("Game started");
 
- document.getElementById("bgm").play().catch(()=>{});
+ gameStarted = true;
+
+ document.getElementById("startScreen").style.display = "none";
+
+ // Start music AFTER click (safe)
+ let bgm = document.getElementById("bgm");
+ bgm.play().catch(()=>{});
+
  gameLoop();
 }
 
