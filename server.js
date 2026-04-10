@@ -6,26 +6,29 @@ const server = http.createServer();
 const wss = new WebSocket.Server({ server });
 
 let players = [];
-let readyCount = 0;
 
 wss.on("connection", (ws) => {
   players.push(ws);
+  console.log("Player connected:", players.length);
 
   ws.on("message", (msg) => {
     let data = JSON.parse(msg);
 
+    // ✅ READY SYSTEM FIXED
     if (data.type === "ready") {
-      readyCount++;
+      if (players.length >= 2) {
+        console.log("Starting game...");
 
-      if (readyCount >= 2) {
         players.forEach(p => {
-          p.send(JSON.stringify({ type: "start" }));
+          if (p.readyState === WebSocket.OPEN) {
+            p.send(JSON.stringify({ type: "start" }));
+          }
         });
-        readyCount = 0;
       }
       return;
     }
 
+    // normal messages
     players.forEach(p => {
       if (p !== ws && p.readyState === WebSocket.OPEN) {
         p.send(msg);
@@ -35,6 +38,7 @@ wss.on("connection", (ws) => {
 
   ws.on("close", () => {
     players = players.filter(p => p !== ws);
+    console.log("Player left:", players.length);
   });
 });
 
