@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Tetris Pro Stable</title>
+  <title>Tetris Working</title>
   <style>
     body {
       margin:0;
@@ -36,17 +36,17 @@
       border-radius:8px;
     }
 
-    #startScreen {
+    /* SIMPLE START BUTTON (NO OVERLAY BUG) */
+    #startBtn {
       position:fixed;
-      width:100%;
-      height:100%;
-      background:black;
-      display:flex;
-      justify-content:center;
-      align-items:center;
-      flex-direction:column;
-      font-size:30px;
-      z-index:10;
+      top:20px;
+      left:20px;
+      padding:15px;
+      font-size:16px;
+      background:lime;
+      border:none;
+      cursor:pointer;
+      z-index:100;
     }
 
     #overlay {
@@ -65,6 +65,8 @@
 
 <body>
 
+<button id="startBtn" onclick="startGame()">START GAME</button>
+
 <canvas id="game" width="240" height="400"></canvas>
 
 <div id="panel">
@@ -79,23 +81,12 @@
   <button onclick="moveDown()">⬇️</button>
 </div>
 
-<div id="startScreen">
-  <button onclick="startGame()" style="padding:20px;font-size:20px;">
-    START GAME
-  </button>
-</div>
-
 <div id="overlay">
   <div>GAME OVER</div>
   <button onclick="location.reload()">Restart</button>
 </div>
 
-<!-- AUDIO -->
 <audio id="bgm" src="bg.mp3" loop></audio>
-<audio id="moveSound" src="move.wav"></audio>
-<audio id="rotateSound" src="rotate.wav"></audio>
-<audio id="clearSound" src="clear.wav"></audio>
-<audio id="gameOverSound" src="gameover.wav"></audio>
 
 <script>
 const canvas = document.getElementById("game");
@@ -106,8 +97,8 @@ const COLS = 10;
 const SIZE = 20;
 
 let board, piece, score, level, speed;
-let gameOver = false;
 let gameStarted = false;
+let gameOver = false;
 
 const pieces = [
  {shape:[[1,1,1,1]],color:"cyan"},
@@ -126,7 +117,6 @@ function init(){
  speed = 500;
  gameOver = false;
  piece = randomPiece();
- updateUI();
 }
 
 function randomPiece(){
@@ -140,10 +130,8 @@ function randomPiece(){
 }
 
 function drawCell(x,y,color){
- ctx.fillStyle = color;
+ ctx.fillStyle=color;
  ctx.fillRect(x*SIZE,y*SIZE,SIZE,SIZE);
- ctx.strokeStyle="#111";
- ctx.strokeRect(x*SIZE,y*SIZE,SIZE,SIZE);
 }
 
 function draw(){
@@ -166,14 +154,10 @@ function collision(){
  return piece.shape.some((row,y)=>
   row.some((val,x)=>{
     if(!val) return false;
-
     let newX = piece.x + x;
     let newY = piece.y + y;
-
-    if(newX < 0 || newX >= COLS) return true;
-    if(newY >= ROWS) return true;
-    if(newY >= 0 && board[newY][newX]) return true;
-
+    if(newX<0||newX>=COLS||newY>=ROWS) return true;
+    if(newY>=0 && board[newY][newX]) return true;
     return false;
   })
  );
@@ -183,132 +167,71 @@ function merge(){
  piece.shape.forEach((row,y)=>{
   row.forEach((val,x)=>{
     if(val){
-      if(piece.y+y < 0) endGame();
-      board[piece.y+y][piece.x+x] = piece.color;
+      if(piece.y+y<0) endGame();
+      board[piece.y+y][piece.x+x]=piece.color;
     }
   });
-}
-
-function clearLines(){
- let lines = 0;
-
- board = board.filter(row=>{
-  if(row.every(cell=>cell!==0)){
-    lines++;
-    return false;
-  }
-  return true;
  });
-
- while(board.length < ROWS){
-  board.unshift(Array(COLS).fill(0));
- }
-
- if(lines>0){
-  playSound("clearSound");
-  score += lines * 10;
-  level = Math.floor(score/50)+1;
-  speed = Math.max(100,500-(level*40));
-  updateUI();
- }
-}
-
-function updateUI(){
- document.getElementById("score").innerText = score;
- document.getElementById("level").innerText = level;
 }
 
 function moveDown(){
- if(gameOver || !gameStarted) return;
+ if(!gameStarted||gameOver) return;
 
  piece.y++;
-
  if(collision()){
   piece.y--;
   merge();
-  clearLines();
-  piece = randomPiece();
-
+  piece=randomPiece();
   if(collision()) endGame();
  }
 }
 
-function move(dir){
- piece.x += dir;
- if(collision()) piece.x -= dir;
- else playSound("moveSound");
+function move(d){
+ piece.x+=d;
+ if(collision()) piece.x-=d;
 }
 
 function rotate(){
  let rotated = piece.shape[0].map((_,i)=>
   piece.shape.map(row=>row[i]).reverse()
  );
-
- let oldX = piece.x;
- let oldShape = piece.shape;
-
- piece.shape = rotated;
-
- if(collision()){
-  piece.x++;
-  if(collision()){
-    piece.x -= 2;
-    if(collision()){
-      piece.x = oldX;
-      piece.shape = oldShape;
-    }
-  }
- } else {
-  playSound("rotateSound");
- }
+ let old=piece.shape;
+ piece.shape=rotated;
+ if(collision()) piece.shape=old;
 }
 
 function endGame(){
- gameOver = true;
- document.getElementById("overlay").style.display = "flex";
- playSound("gameOverSound");
+ gameOver=true;
+ document.getElementById("overlay").style.display="flex";
 }
 
-function playSound(id){
- let s = document.getElementById(id);
- s.currentTime = 0;
- s.play().catch(()=>{});
-}
-
-// KEYBOARD
 window.addEventListener("keydown",e=>{
- if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].includes(e.key)){
-  e.preventDefault();
- }
-
  if(e.key==="ArrowLeft") move(-1);
  if(e.key==="ArrowRight") move(1);
  if(e.key==="ArrowDown") moveDown();
  if(e.key==="ArrowUp") rotate();
 });
 
-// ✅ FIXED START FUNCTION
 function startGame(){
- console.log("Game started");
+ console.log("START WORKED");
 
- gameStarted = true;
+ gameStarted=true;
 
- document.getElementById("startScreen").style.display = "none";
+ // play sound safely
+ document.getElementById("bgm").play().catch(()=>{});
 
- // Start music AFTER click (safe)
- let bgm = document.getElementById("bgm");
- bgm.play().catch(()=>{});
+ document.getElementById("startBtn").style.display="none";
 
  gameLoop();
 }
 
 function gameLoop(){
- if(gameOver || !gameStarted) return;
+ if(!gameStarted||gameOver) return;
 
  moveDown();
  draw();
 
- setTimeout(gameLoop, speed);
+ setTimeout(gameLoop,500);
 }
 
 init();
