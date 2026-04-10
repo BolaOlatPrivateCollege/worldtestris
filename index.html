@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Tetris Fixed</title>
+  <title>Tetris Stable</title>
   <style>
     body {
       margin:0;
@@ -27,15 +27,33 @@
       background:lime;
       border:none;
       cursor:pointer;
+      z-index:10;
+    }
+
+    #overlay {
+      position:fixed;
+      width:100%;
+      height:100%;
+      background:rgba(0,0,0,0.9);
+      display:none;
+      justify-content:center;
+      align-items:center;
+      flex-direction:column;
+      font-size:30px;
     }
   </style>
 </head>
 
 <body>
 
-<button id="startBtn" onclick="startGame()">START</button>
+<button id="startBtn" onclick="startGame()">START GAME</button>
 
 <canvas id="game" width="240" height="400"></canvas>
+
+<div id="overlay">
+  <div>GAME OVER</div>
+  <button onclick="location.reload()">Restart</button>
+</div>
 
 <script>
 const canvas = document.getElementById("game");
@@ -46,30 +64,32 @@ const COLS = 10;
 const SIZE = 20;
 
 let board, piece;
-let gameStarted=false, gameOver=false;
+let gameStarted = false;
+let gameOver = false;
 
-// ✅ ORIGINAL SHAPES (NEVER MUTATE THESE)
+// ✅ SAFE SHAPES (NOT MODIFIED)
 const SHAPES = [
- [[1,1,1,1]],                 // I
- [[1,1],[1,1]],               // O
- [[0,1,0],[1,1,1]],           // T
- [[0,1,1],[1,1,0]],           // S
- [[1,1,0],[0,1,1]],           // Z
- [[1,0,0],[1,1,1]],           // J
- [[0,0,1],[1,1,1]]            // L
+ [[1,1,1,1]],
+ [[1,1],[1,1]],
+ [[0,1,0],[1,1,1]],
+ [[0,1,1],[1,1,0]],
+ [[1,1,0],[0,1,1]],
+ [[1,0,0],[1,1,1]],
+ [[0,0,1],[1,1,1]]
 ];
 
 const COLORS = ["cyan","yellow","purple","green","red","blue","orange"];
 
-function cloneShape(shape){
-  return shape.map(row => [...row]); // ✅ FIX
+// ✅ CLONE FIX
+function clone(shape){
+  return shape.map(row => [...row]);
 }
 
 function randomPiece(){
   let i = Math.floor(Math.random()*SHAPES.length);
 
   return {
-    shape: cloneShape(SHAPES[i]), // ✅ CLONE
+    shape: clone(SHAPES[i]),
     color: COLORS[i],
     x: Math.floor((COLS - SHAPES[i][0].length)/2),
     y: 0
@@ -82,7 +102,7 @@ function init(){
 }
 
 function drawCell(x,y,color){
-  ctx.fillStyle=color;
+  ctx.fillStyle = color;
   ctx.fillRect(x*SIZE,y*SIZE,SIZE,SIZE);
   ctx.strokeStyle="#111";
   ctx.strokeRect(x*SIZE,y*SIZE,SIZE,SIZE);
@@ -125,7 +145,7 @@ function merge(){
   piece.shape.forEach((row,y)=>{
     row.forEach((val,x)=>{
       if(val){
-        if(piece.y+y < 0) gameOver=true;
+        if(piece.y+y < 0) gameOver = true;
         board[piece.y+y][piece.x+x] = piece.color;
       }
     });
@@ -142,7 +162,7 @@ function moveDown(){
     merge();
     piece = randomPiece();
 
-    if(collision()) gameOver=true;
+    if(collision()) gameOver = true;
   }
 }
 
@@ -154,14 +174,14 @@ function move(dir){
   }
 }
 
-// ✅ SAFE ROTATION (NO SHAPE DAMAGE)
+// ✅ SAFE ROTATION
 function rotate(){
-  let newShape = piece.shape[0].map((_,i)=>
+  let rotated = piece.shape[0].map((_,i)=>
     piece.shape.map(row=>row[i]).reverse()
   );
 
   let old = piece.shape;
-  piece.shape = newShape;
+  piece.shape = rotated;
 
   if(collision()){
     piece.shape = old;
